@@ -62,6 +62,17 @@ const maskControlGroup = [
 const defaults = Object.fromEntries([...Object.values(controlGroups).flat(), ...Object.values(hslGroups).flat()].map((item) => [item.id, 0]));
 const maskDefaults = Object.fromEntries(maskControlGroup.map((item) => [item.id, item.initial ?? 0]));
 
+function defaultMaskGeometry() {
+  return {
+    gradient: { start: { x: 0.25, y: 0.65 }, end: { x: 0.75, y: 0.35 } },
+    radial: { center: { x: 0.5, y: 0.5 }, radiusX: 0.28, radiusY: 0.2, feather: 0.32 },
+  };
+}
+
+function cloneMaskGeometry(geometry) {
+  return JSON.parse(JSON.stringify(geometry || defaultMaskGeometry()));
+}
+
 const builtInPresetValues = {
   natural: { ...defaults },
   cinematic: { ...defaults, exposure: 0.15, contrast: 18, highlights: -24, shadows: 16, blacks: -12, temperature: 8, tint: 3, saturation: -4, vibrance: 18, clarity: 12, dehaze: 8, vignette: 16, grain: 7 },
@@ -93,6 +104,8 @@ const state = {
   isExporting: false,
   isPainting: false,
   lastPaintPoint: null,
+  maskDragStart: null,
+  maskGestureSnapshot: null,
   drawerOpen: false,
 };
 
@@ -104,6 +117,8 @@ const elements = Object.fromEntries([
   "presetPreviewImage", "presetPreviewEmpty", "presetPreviewName", "importPresetButton", "presetFileInput",
   "previousSettingsButton", "undoButton",
   "splitLine", "brushCursor", "zoomOutButton", "zoomInButton", "fitButton", "zoomValue",
+  "maskGeometryOverlay", "gradientGuide", "gradientGuideLine", "gradientStartHandle", "gradientEndHandle",
+  "radialGuide", "radialGuideEllipse", "radialCenterHandle",
   "filmstripSection", "filmstripList", "photoCount", "selectedCount", "selectAllButton",
   "maskHelp", "showMaskToggle", "clearMaskButton", "brushOptions", "brushSizeRange",
   "brushSizeValue", "eraseMaskToggle", "maskControls", "exportDialog", "exportForm",
@@ -163,6 +178,11 @@ const fragmentShaderSource = `#version 300 es
   uniform float u_maskDefringe;
   uniform float u_maskStrength;
   uniform float u_showMask;
+  uniform vec2 u_gradientStart;
+  uniform vec2 u_gradientEnd;
+  uniform vec2 u_radialCenter;
+  uniform vec2 u_radialRadius;
+  uniform float u_radialFeather;
   in vec2 v_uv;
   out vec4 outColor;
 
@@ -249,7 +269,17 @@ const fragmentShaderSource = `#version 300 es
 
     float localMask = 0.0;
     if (u_maskMode > 0.5 && u_maskMode < 1.5) localMask = skyMaskFor(source);
-    if (u_maskMode > 1.5) localMask = texture(u_maskTexture, v_uv).r;
+    if (u_maskMode > 1.5 && u_maskMode < 2.5) localMask = texture(u_maskTexture, v_uv).r;
+    if (u_maskMode > 2.5 && u_maskMode < 3.5) {
+      vec2 direction = u_gradientEnd - u_gradientStart;
+      float progress = dot(v_uv - u_gradientStart, direction) / max(dot(direction, direction), 0.0001);
+      localMask = 1.0 - smoothstep(0.0, 1.0, progress);
+    }
+    if (u_maskMode > 3.5) {
+      vec2 radialPoint = (v_uv - u_radialCenter) / max(u_radialRadius, vec2(0.001));
+      float radialDistance = length(radialPoint);
+      localMask = 1.0 - smoothstep(max(0.0, 1.0 - u_radialFeather), 1.0, radialDistance);
+    }
     localMask = clamp(localMask * u_maskStrength, 0.0, 1.0);
     vec3 localColor = color + (color - blur) * (u_maskClarity * 0.65 + u_maskSharpness * 0.45);
     localColor = mix(localColor, blur, u_maskNoise * 0.72);
@@ -291,7 +321,9 @@ let renderFrame = null;
 let toastTimer = null;
 
 function activePhoto() { return state.photos.find((photo) => photo.id === state.activeId) || null; }
-function maskModeNumber(type) { return type === "sky" ? 1 : type === "brush" ? 2 : 0; }
+function maskModeNumber(type) {
+  return type === "sky" ? 1 : type === "brush" ? 2 : type === "gradient" ? 3 : type === "radial" ? 4 : 0;
+}
 
 function takeSnapshot(photo, includeMask = false) {
   return {
@@ -300,6 +332,7 @@ function takeSnapshot(photo, includeMask = false) {
     maskType: photo.maskType,
     showMask: photo.showMask,
     preset: photo.preset,
+    maskGeometry: cloneMaskGeometry(photo.maskGeometry),
     maskData: includeMask ? photo.maskCanvas.toDataURL("image/png") : null,
   };
 }
@@ -317,6 +350,7 @@ async function restoreSnapshot(photo, snapshot) {
   photo.maskType = snapshot.maskType;
   photo.showMask = snapshot.showMask;
   photo.preset = snapshot.preset;
+  photo.maskGeometry = cloneMaskGeometry(snapshot.maskGeometry);
   if (snapshot.maskData) {
     const maskImage = new Image();
     await new Promise((resolve, reject) => {
@@ -360,7 +394,8 @@ function copyPreviousSettings() {
   pushHistory(photo, takeSnapshot(photo));
   photo.values = { ...previous.values };
   photo.maskValues = { ...previous.maskValues };
-  photo.maskType = previous.maskType === "sky" ? "sky" : "none";
+  photo.maskGeometry = cloneMaskGeometry(previous.maskGeometry);
+  photo.maskType = ["sky", "gradient", "radial"].includes(previous.maskType) ? previous.maskType : "none";
   photo.showMask = false;
   photo.preset = previous.preset;
   syncControls();
@@ -394,7 +429,7 @@ function initWebGL() {
   gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1,1,-1,-1,1,-1,1,1,-1,1,1]), gl.STATIC_DRAW);
   gl.enableVertexAttribArray(positionLocation);
   gl.vertexAttribPointer(positionLocation, 2, gl.FLOAT, false, 0, 0);
-  const names = ["u_image","u_maskTexture","u_textureSize","u_exposure","u_contrast","u_highlights","u_shadows","u_whites","u_blacks","u_temperature","u_tint","u_saturation","u_vibrance","u_hslHue[0]","u_hslSat[0]","u_hslLum[0]","u_clarity","u_dehaze","u_vignette","u_grain","u_original","u_seed","u_maskMode","u_maskExposure","u_maskContrast","u_maskHighlights","u_maskShadows","u_maskWhites","u_maskBlacks","u_maskTemperature","u_maskTint","u_maskSaturation","u_maskClarity","u_maskDehaze","u_maskSharpness","u_maskNoise","u_maskMoire","u_maskDefringe","u_maskStrength","u_showMask"];
+  const names = ["u_image","u_maskTexture","u_textureSize","u_exposure","u_contrast","u_highlights","u_shadows","u_whites","u_blacks","u_temperature","u_tint","u_saturation","u_vibrance","u_hslHue[0]","u_hslSat[0]","u_hslLum[0]","u_clarity","u_dehaze","u_vignette","u_grain","u_original","u_seed","u_maskMode","u_maskExposure","u_maskContrast","u_maskHighlights","u_maskShadows","u_maskWhites","u_maskBlacks","u_maskTemperature","u_maskTint","u_maskSaturation","u_maskClarity","u_maskDehaze","u_maskSharpness","u_maskNoise","u_maskMoire","u_maskDefringe","u_maskStrength","u_showMask","u_gradientStart","u_gradientEnd","u_radialCenter","u_radialRadius","u_radialFeather"];
   uniforms = Object.fromEntries(names.map((name) => [name, gl.getUniformLocation(program, name)]));
   gl.uniform1i(uniforms.u_image, 0);
   gl.uniform1i(uniforms.u_maskTexture, 1);
@@ -469,6 +504,12 @@ function setPhotoUniforms(photo, original = false, hideMask = false) {
   gl.uniform1f(uniforms.u_maskDefringe, local.defringe / 100);
   gl.uniform1f(uniforms.u_maskStrength, local.strength / 100);
   gl.uniform1f(uniforms.u_showMask, !hideMask && photo.showMask ? 1 : 0);
+  const geometry = photo.maskGeometry || defaultMaskGeometry();
+  gl.uniform2f(uniforms.u_gradientStart, geometry.gradient.start.x, 1 - geometry.gradient.start.y);
+  gl.uniform2f(uniforms.u_gradientEnd, geometry.gradient.end.x, 1 - geometry.gradient.end.y);
+  gl.uniform2f(uniforms.u_radialCenter, geometry.radial.center.x, 1 - geometry.radial.center.y);
+  gl.uniform2f(uniforms.u_radialRadius, geometry.radial.radiusX, geometry.radial.radiusY);
+  gl.uniform1f(uniforms.u_radialFeather, geometry.radial.feather);
 }
 
 function drawPhoto(photo, original = false, hideMask = false) {
@@ -643,22 +684,13 @@ function renderPresetList() {
     button.type = "button";
     button.className = `preset-list-item${photo?.preset === preset.id ? " active" : ""}`;
     button.dataset.preset = preset.id;
-    const swatch = document.createElement("span");
-    swatch.className = "preset-list-swatch";
-    swatch.style.background = preset.swatch || "linear-gradient(135deg,#1fd1f9,#1268ff)";
-    const copy = document.createElement("span");
-    copy.className = "preset-list-copy";
     const name = document.createElement("span");
     name.className = "preset-list-name";
     name.textContent = preset.name;
-    const source = document.createElement("span");
-    source.className = "preset-list-source";
-    source.textContent = preset.source || "LIGHTROOM";
-    copy.append(name, source);
     const mark = document.createElement("span");
     mark.className = "preset-current-mark";
     mark.textContent = photo?.preset === preset.id ? "✓" : "";
-    button.append(swatch, copy, mark);
+    button.append(name, mark);
     button.addEventListener("mouseenter", () => showPresetPreview(preset));
     button.addEventListener("focus", () => showPresetPreview(preset));
     button.addEventListener("mouseleave", () => showPresetPreview(presetById(activePhoto()?.preset) || builtInPresets[0]));
@@ -825,7 +857,7 @@ async function fileToPhoto(file) {
   return {
     id: crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`,
     file, url, image, selected: true, values: { ...defaults }, preset: "natural", history: [],
-    maskType: "none", maskValues: { ...maskDefaults }, maskCanvas: createMaskCanvas(image), showMask: false,
+    maskType: "none", maskValues: { ...maskDefaults }, maskGeometry: defaultMaskGeometry(), maskCanvas: createMaskCanvas(image), showMask: false,
   };
 }
 
@@ -874,6 +906,59 @@ function renderFilmstrip() {
   elements.filmstripSection.hidden = state.photos.length === 0;
 }
 
+function syncMaskGeometryOverlay() {
+  const photo = activePhoto();
+  if (!photo) return;
+  const geometry = photo.maskGeometry || defaultMaskGeometry();
+  const showGradient = photo.maskType === "gradient";
+  const showRadial = photo.maskType === "radial";
+  elements.maskGeometryOverlay.toggleAttribute("hidden", !showGradient && !showRadial);
+  elements.gradientGuide.toggleAttribute("hidden", !showGradient);
+  elements.radialGuide.toggleAttribute("hidden", !showRadial);
+  if (showGradient) {
+    const { start, end } = geometry.gradient;
+    elements.gradientGuideLine.setAttribute("x1", start.x * 100);
+    elements.gradientGuideLine.setAttribute("y1", start.y * 100);
+    elements.gradientGuideLine.setAttribute("x2", end.x * 100);
+    elements.gradientGuideLine.setAttribute("y2", end.y * 100);
+    elements.gradientStartHandle.setAttribute("cx", start.x * 100);
+    elements.gradientStartHandle.setAttribute("cy", start.y * 100);
+    elements.gradientEndHandle.setAttribute("cx", end.x * 100);
+    elements.gradientEndHandle.setAttribute("cy", end.y * 100);
+  }
+  if (showRadial) {
+    const { center, radiusX, radiusY } = geometry.radial;
+    elements.radialGuideEllipse.setAttribute("cx", center.x * 100);
+    elements.radialGuideEllipse.setAttribute("cy", center.y * 100);
+    elements.radialGuideEllipse.setAttribute("rx", radiusX * 100);
+    elements.radialGuideEllipse.setAttribute("ry", radiusY * 100);
+    elements.radialCenterHandle.setAttribute("cx", center.x * 100);
+    elements.radialCenterHandle.setAttribute("cy", center.y * 100);
+  }
+}
+
+function canvasPoint(event) {
+  const rect = elements.canvas.getBoundingClientRect();
+  return {
+    x: Math.min(1, Math.max(0, (event.clientX - rect.left) / rect.width)),
+    y: Math.min(1, Math.max(0, (event.clientY - rect.top) / rect.height)),
+  };
+}
+
+function updateGeometricMask(event) {
+  const photo = activePhoto();
+  if (!photo || !state.maskDragStart || !["gradient", "radial"].includes(photo.maskType)) return;
+  const point = canvasPoint(event);
+  if (photo.maskType === "gradient") {
+    photo.maskGeometry.gradient.end = point;
+  } else {
+    photo.maskGeometry.radial.radiusX = Math.max(0.025, Math.abs(point.x - state.maskDragStart.x));
+    photo.maskGeometry.radial.radiusY = Math.max(0.025, Math.abs(point.y - state.maskDragStart.y));
+  }
+  syncMaskGeometryOverlay();
+  scheduleRender();
+}
+
 function syncMaskUI() {
   const photo = activePhoto();
   if (!photo) return;
@@ -888,7 +973,12 @@ function syncMaskUI() {
     ? "Luma nhận diện vùng trời theo màu và vị trí. Đây là mask cục bộ, không thay hoặc ghép mây."
     : photo.maskType === "brush"
       ? "Kéo cọ trực tiếp trên ảnh để tô vùng cần chỉnh. Bật Tẩy mask để xoá bớt."
-      : "Chọn Bầu trời để tự nhận diện hoặc Cọ vùng để tô thủ công.";
+      : photo.maskType === "gradient"
+        ? "Kéo trên ảnh để tạo dải chuyển sắc tuyến tính. Kéo lại bất cứ lúc nào để vẽ vùng mới."
+        : photo.maskType === "radial"
+          ? "Kéo từ tâm ra ngoài để tạo vùng oval. Kéo lại để thay đổi vị trí và kích thước."
+          : "Chọn Bầu trời, Cọ vùng, Gradient hoặc Oval để tạo vùng chỉnh cục bộ.";
+  syncMaskGeometryOverlay();
   updateBrushCursorVisibility();
 }
 
@@ -978,6 +1068,7 @@ function resetAdjustments() {
   pushHistory(photo, takeSnapshot(photo, true));
   photo.values = { ...defaults };
   photo.maskValues = { ...maskDefaults };
+  photo.maskGeometry = defaultMaskGeometry();
   photo.maskType = "none";
   photo.showMask = false;
   photo.preset = "natural";
@@ -1144,12 +1235,47 @@ function bindEvents() {
   elements.showMaskToggle.addEventListener("change", () => { const photo = activePhoto(); if (!photo) return; pushHistory(photo, takeSnapshot(photo)); photo.showMask = elements.showMaskToggle.checked; syncMaskUI(); scheduleRender(); });
   elements.clearMaskButton.addEventListener("click", clearBrushMask);
   elements.brushSizeRange.addEventListener("input", () => { elements.brushSizeValue.textContent = elements.brushSizeRange.value; setRangeProgress(elements.brushSizeRange); });
-  elements.canvas.addEventListener("pointerdown", (event) => { const photo = activePhoto(); if (!photo || photo.maskType !== "brush") return; event.preventDefault(); pushHistory(photo, takeSnapshot(photo, true)); state.isPainting = true; state.lastPaintPoint = null; elements.canvas.setPointerCapture(event.pointerId); paintMask(event); });
-  elements.canvas.addEventListener("pointermove", (event) => { updateBrushCursor(event); if (state.isPainting) paintMask(event); });
-  const stopPainting = () => { state.isPainting = false; state.lastPaintPoint = null; };
+  elements.canvas.addEventListener("pointerdown", (event) => {
+    const photo = activePhoto();
+    if (!photo || !["brush", "gradient", "radial"].includes(photo.maskType)) return;
+    event.preventDefault();
+    state.isPainting = true;
+    state.lastPaintPoint = null;
+    elements.canvas.setPointerCapture(event.pointerId);
+    if (photo.maskType === "brush") {
+      pushHistory(photo, takeSnapshot(photo, true));
+      paintMask(event);
+      return;
+    }
+    state.maskGestureSnapshot = takeSnapshot(photo);
+    state.maskDragStart = canvasPoint(event);
+    if (photo.maskType === "gradient") {
+      photo.maskGeometry.gradient.start = { ...state.maskDragStart };
+      photo.maskGeometry.gradient.end = { ...state.maskDragStart };
+    } else {
+      photo.maskGeometry.radial.center = { ...state.maskDragStart };
+      photo.maskGeometry.radial.radiusX = 0.025;
+      photo.maskGeometry.radial.radiusY = 0.025;
+    }
+    updateGeometricMask(event);
+  });
+  elements.canvas.addEventListener("pointermove", (event) => {
+    updateBrushCursor(event);
+    if (!state.isPainting) return;
+    if (activePhoto()?.maskType === "brush") paintMask(event);
+    else updateGeometricMask(event);
+  });
+  const stopPainting = () => {
+    const photo = activePhoto();
+    if (photo && state.maskGestureSnapshot) pushHistory(photo, state.maskGestureSnapshot);
+    state.isPainting = false;
+    state.lastPaintPoint = null;
+    state.maskDragStart = null;
+    state.maskGestureSnapshot = null;
+  };
   elements.canvas.addEventListener("pointerup", stopPainting);
   elements.canvas.addEventListener("pointercancel", stopPainting);
-  elements.canvas.addEventListener("pointerleave", () => { stopPainting(); elements.brushCursor.hidden = true; });
+  elements.canvas.addEventListener("pointerleave", () => { if (!state.isPainting) elements.brushCursor.hidden = true; });
   elements.selectAllButton.addEventListener("click", () => { const allSelected = state.photos.length > 0 && state.photos.every((photo) => photo.selected); state.photos.forEach((photo) => { photo.selected = !allSelected; }); renderFilmstrip(); updateExportCount(); });
   elements.exportScopeSelect.addEventListener("change", updateExportCount);
   elements.formatSelect.addEventListener("change", () => { elements.qualityField.hidden = elements.formatSelect.value === "image/png"; });
