@@ -1,0 +1,7 @@
+# Keep the compact CodeGraph index in this repository so another AI agent can
+# explore the code immediately. Ignore only transient runtime files.
+*.db-wal
+*.db-shm
+*.pid
+*.sock
+*.log

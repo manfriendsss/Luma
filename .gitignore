@@ -1,0 +1,12 @@
+node_modules/
+.env
+.env.*
+*.log
+output/
+exports/
+.DS_Store
+Thumbs.db
+Luma.ico
+Luma-v2.ico
+assets/Luma-icon.png
+assets/Luma-icon-rounded.png
