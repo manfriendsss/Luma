@@ -1,12 +1,18 @@
 # LUMA
 
 <p align="center">
+  <img src="./assets/LUMA-icon-blue.png" width="144" alt="LUMA logo">
+</p>
+
+<p align="center">
   <strong>A lightweight, local-first photo editor built for personal desktop workflows.</strong><br>
   <strong>Trình chỉnh ảnh nhẹ, ưu tiên xử lý cục bộ cho nhu cầu cá nhân trên máy tính.</strong>
 </p>
 
 <p align="center">
   <img alt="Version 2.0.0" src="https://img.shields.io/badge/version-2.0.0-0284c7">
+  <img alt="Free and open source" src="https://img.shields.io/badge/free_%26_open_source-yes-0ea5e9">
+  <img alt="MIT License" src="https://img.shields.io/badge/license-MIT-0369a1">
   <img alt="Desktop optimized" src="https://img.shields.io/badge/optimized_for-desktop-2563eb">
   <img alt="Local-first" src="https://img.shields.io/badge/privacy-local--first-0891b2">
   <img alt="WebGL 2" src="https://img.shields.io/badge/rendering-WebGL_2-0369a1">
@@ -24,7 +30,7 @@
 
 ### Tổng quan
 
-LUMA là trình chỉnh màu ảnh lấy cảm hứng từ Lightroom, được thiết kế cho **người dùng cá nhân muốn chỉnh ảnh nhanh trên máy tính** mà không cần cài một bộ phần mềm nặng.
+LUMA là trình chỉnh màu ảnh **miễn phí và mã nguồn mở** lấy cảm hứng từ Lightroom, được thiết kế cho **người dùng cá nhân muốn chỉnh ảnh nhanh trên máy tính** mà không cần cài một bộ phần mềm nặng.
 
 Ứng dụng chạy trong Chrome hoặc Edge, sử dụng WebGL 2 để xử lý ảnh bằng GPU. Ảnh, lịch sử chỉnh sửa và preset được xử lý cục bộ trên thiết bị; LUMA không yêu cầu tài khoản, máy chủ xử lý ảnh hay gói thuê bao.
 
@@ -33,6 +39,7 @@ LUMA là trình chỉnh màu ảnh lấy cảm hứng từ Lightroom, được t
 ### Vì sao chọn LUMA?
 
 - **Dành cho nhu cầu cá nhân:** mở ảnh, chỉnh màu, so sánh trước/sau và xuất file trong một quy trình gọn gàng.
+- **Miễn phí và mã nguồn mở:** không quảng cáo, không thuê bao; mã nguồn được phát hành theo giấy phép MIT để mọi người có thể xem, sử dụng, sửa đổi và đóng góp.
 - **Tối ưu cho máy tính:** giao diện desktop, phím tắt, filmstrip nhiều ảnh, chế độ toàn màn hình và thao tác chuột chính xác.
 - **Nhẹ:** không cần cài đặt phần mềm chỉnh ảnh lớn; bản local chỉ cần Node.js hoặc Python để phục vụ file tĩnh.
 - **Xử lý cục bộ:** ảnh không được gửi tới dịch vụ xử lý bên ngoài.
@@ -173,13 +180,17 @@ LUMA hỗ trợ các thông số phổ biến như Exposure, Contrast, Highlight
 
 Preset có thể chứa công cụ độc quyền của Lightroom mà trình duyệt không có tương đương. Những trường không được hỗ trợ sẽ được bỏ qua an toàn, vì vậy kết quả có thể không giống Lightroom tuyệt đối.
 
+### Giấy phép
+
+LUMA là phần mềm miễn phí và mã nguồn mở, được phát hành theo [MIT License](./LICENSE). Bạn có thể sử dụng, sao chép, sửa đổi và phân phối phần mềm theo các điều khoản của giấy phép.
+
 ---
 
 ## English
 
 ### Overview
 
-LUMA is a Lightroom-inspired photo editor designed for **personal desktop photography workflows**. It provides the essential tools needed to edit, compare, organize, and export photos without installing a large creative suite.
+LUMA is a **free and open-source**, Lightroom-inspired photo editor designed for **personal desktop photography workflows**. It provides the essential tools needed to edit, compare, organize, and export photos without installing a large creative suite.
 
 The app runs in Chrome or Edge and uses WebGL 2 for GPU-accelerated image processing. Photos, edit history, and presets are handled locally on the device; LUMA does not require an account, a remote image-processing service, or a subscription.
 
@@ -188,6 +199,7 @@ The app runs in Chrome or Edge and uses WebGL 2 for GPU-accelerated image proces
 ### Why LUMA?
 
 - **Made for personal use:** a focused workflow for opening photos, grading color, comparing results, and exporting finished files.
+- **Free and open source:** no ads and no subscription; the MIT-licensed source is available for anyone to inspect, use, modify, and contribute to.
 - **Desktop optimized:** precise mouse controls, keyboard shortcuts, a multi-image filmstrip, and fullscreen editing.
 - **Lightweight:** no heavyweight editor installation; the local version only needs Node.js or Python to serve static files.
 - **Local-first:** photos are not uploaded to an external processing service.
@@ -327,6 +339,10 @@ wrangler pages deploy dist --project-name luma-photo-editor --branch main
 LUMA supports common settings including Exposure, Contrast, Highlights, Shadows, Whites, Blacks, White Balance, Saturation, Vibrance, Texture, Clarity, Dehaze, Vignette, Grain, Detail, HSL, Tone Curve, Color Grading, and legacy Split Toning.
 
 Some presets include Lightroom-specific tools that have no browser equivalent. Unsupported fields are ignored safely, so results may not match Lightroom exactly.
+
+### License
+
+LUMA is free and open-source software released under the [MIT License](./LICENSE). You may use, copy, modify, and distribute it under the terms of the license.
 
 ---
 
