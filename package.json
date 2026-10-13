@@ -1,15 +1,16 @@
 {
   "name": "luma-photo-editor",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "private": true,
-  "description": "Local-first WebGL photo editor with multi-image workflow, Lightroom preset import, masking, undo, and batch export.",
+  "description": "Local-first WebGL photo editor: multi-image workflow, Lightroom preset import/export, tone curve, color grading, multi-mask local adjustments, crop & straighten, histogram, autosave and batch export.",
   "type": "module",
   "scripts": {
     "build": "node scripts/build.mjs",
     "prestart": "npm run build",
     "start": "node server.mjs",
-    "check": "node --check src/app.js && node --check dist/app.js",
-    "test": "node test/smoke.mjs"
+    "check": "node scripts/check.mjs",
+    "test": "node test/smoke.mjs && node test/unit.mjs",
+    "test:e2e": "node test/e2e.mjs"
   },
   "engines": {
     "node": ">=18"

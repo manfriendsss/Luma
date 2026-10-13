@@ -2,7 +2,7 @@
 
 ## Project
 
-LUMA is a dependency-free, local-first photo editor. `src/` is the source of truth and `dist/` is the generated runnable copy. Images stay in the browser and are never uploaded.
+LUMA is a dependency-free, local-first photo editor. `src/` is the source of truth (native ES modules, no bundler) and `dist/` is the generated runnable copy (git-ignored). Images stay in the browser and are never uploaded; sessions are autosaved to IndexedDB on the user's device.
 
 ## CodeGraph
 
@@ -25,26 +25,33 @@ npm start
 npm run build
 npm run check
 npm test
+npm run test:e2e   # needs Playwright + Chromium; skipped automatically if missing
 ```
 
 Open `http://127.0.0.1:4173`. Chrome or Edge with WebGL 2 is recommended.
 
 ## Architecture
 
-- `src/index.html`: semantic application shell and dialogs.
-- `src/styles.css`: responsive neutral-gray/ocean-blue interface, preset drawer, filmstrip, controls.
-- `src/app.js`: state, WebGL shader, multi-image workflow, masking, preset import, undo, and export.
-- `dist/`: generated runnable copy; do not edit it directly.
-- `scripts/build.mjs`: copies `src/` to `dist/` without dependencies.
+- `src/index.html`: application shell and dialogs.
+- `src/styles.css`: neutral-gray/ocean-blue interface.
+- `src/app.js`: entry point, imports `src/js/main.js`.
+- `src/js/main.js`: state, UI wiring, pointer tools (brush, gradient, radial, crop, eyedropper), history, presets, sync, export, autosave.
+- `src/js/renderer.js`: WebGL 2 pipeline. sRGB mipmapped source texture; exposure/white balance in linear light; tone, curve (LUT), HSL, color grading, up to 8 masks (R8 texture array), vignette, grain, dithering. All radii are in source pixels so preview matches export. Tiled rendering for export.
+- `src/js/geometry.js`: crop/straighten/rotate/flip transforms (keep in sync with the shader's `u_cropMat`).
+- `src/js/presets.js`: Lightroom XMP/lrtemplate and LUMA JSON import/export (pure, unit-tested).
+- `src/js/settings.js`, `config.js`: settings model, defaults, built-in presets.
+- `src/js/curve.js`, `color.js`, `widgets.js`, `controls.js`, `zip.js`, `jpeg-meta.js`, `storage.js`: helpers.
+- `scripts/build.mjs`: cleans and copies `src/` to `dist/`. `scripts/check.mjs`: syntax check.
 - `server.mjs`: zero-dependency local static server.
-- `launch-luma.ps1` and `Luma.bat`: Windows desktop launcher.
-- `assets/`: source-quality application icon assets.
+- `launch-luma.ps1` and `Luma.bat`: Windows desktop launcher (Node first, Python fallback with correct JS MIME type).
+- `test/`: smoke, unit (Node only) and e2e (Playwright) tests with fixtures.
 
 ## Invariants
 
 - Never upload user photos or add network processing.
-- Photo adjustments must remain non-destructive and color-only.
-- Do not replace faces, skies, or image content.
-- Preserve per-photo settings when switching filmstrip items.
-- Keep batch export at the original image dimensions.
-- Run `npm run build`, `npm run check`, `npm test`, and `codegraph sync .` after changes.
+- Edits are non-destructive: colour adjustments plus crop/straighten/rotate/flip geometry stored as settings; the original file is never modified.
+- Do not replace faces, skies, or image content (masks only adjust colour/tone/detail).
+- Preserve per-photo settings, masks and history when switching filmstrip items.
+- Export at the full resolution of the crop unless the user picks a long-edge limit; never overwrite existing files.
+- Lightroom sign conventions are used for shared sliders (e.g. negative vignette darkens).
+- Run `npm run build`, `npm run check`, `npm test`, `npm run test:e2e` and `codegraph sync .` after changes.

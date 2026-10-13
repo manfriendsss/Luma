@@ -1,0 +1,51 @@
+<x:xmpmeta xmlns:x="adobe:ns:meta/" x:xmptk="Adobe XMP Core 7.0">
+ <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
+  <rdf:Description rdf:about=""
+    xmlns:crs="http://ns.adobe.com/camera-raw-settings/1.0/"
+    crs:PresetType="Normal"
+    crs:Version="15.0"
+    crs:ProcessVersion="11.0"
+    crs:SplitToningShadowTint="+25"
+    crs:SplitToningShadowSaturation="40"
+    crs:SplitToningShadowHue="210"
+    crs:ColorGradeMidtoneHue="30"
+    crs:ColorGradeMidtoneSat="12"
+    crs:Exposure2012="+0.35"
+    crs:Contrast2012="+12"
+    crs:Highlights2012="-40"
+    crs:Shadows2012="+30"
+    crs:IncrementalTemperature="+15"
+    crs:IncrementalTint="-6"
+    crs:Saturation="-10"
+    crs:Vibrance="+20"
+    crs:Texture="+8"
+    crs:Clarity2012="+10"
+    crs:Dehaze="+5"
+    crs:PostCropVignetteAmount="-30"
+    crs:GrainAmount="20"
+    crs:HueAdjustmentOrange="-6"
+    crs:SaturationAdjustmentBlue="-25"
+    crs:LuminanceAdjustmentGreen="+15"
+    crs:ColorGradeBlending="70"
+    crs:SplitToningBalance="-20"
+    crs:HasSettings="True">
+   <crs:Name>
+    <rdf:Alt>
+     <rdf:li xml:lang="x-default">Chân dung ấm</rdf:li>
+    </rdf:Alt>
+   </crs:Name>
+   <crs:ToneCurvePV2012>
+    <rdf:Seq>
+     <rdf:li>0, 18</rdf:li>
+     <rdf:li>128, 132</rdf:li>
+     <rdf:li>255, 245</rdf:li>
+    </rdf:Seq>
+   </crs:ToneCurvePV2012>
+   <crs:MaskGroupBasedCorrections>
+    <rdf:Seq>
+     <rdf:li crs:LocalExposure2012="+1.5" crs:LocalClarity2012="-80" crs:LocalContrast2012="+90"/>
+    </rdf:Seq>
+   </crs:MaskGroupBasedCorrections>
+  </rdf:Description>
+ </rdf:RDF>
+</x:xmpmeta>

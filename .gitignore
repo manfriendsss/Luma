@@ -7,6 +7,8 @@ output/
 exports/
 .DS_Store
 Thumbs.db
+# Bản build sinh ra từ src/ – Cloudflare Pages tự build, không cần commit
+dist/
 Luma.ico
 Luma-v2.ico
 assets/Luma-icon.png

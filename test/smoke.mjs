@@ -1,42 +1,34 @@
+// Kiểm tra cấu trúc nhanh: các phần tử giao diện và module bắt buộc tồn tại.
 import { readFile } from "node:fs/promises";
 import { strict as assert } from "node:assert";
 
-const html = await readFile(new URL("../src/index.html", import.meta.url), "utf8");
-const css = await readFile(new URL("../src/styles.css", import.meta.url), "utf8");
-const js = await readFile(new URL("../src/app.js", import.meta.url), "utf8");
-const distHtml = await readFile(new URL("../dist/index.html", import.meta.url), "utf8");
-const distCss = await readFile(new URL("../dist/styles.css", import.meta.url), "utf8");
-const distJs = await readFile(new URL("../dist/app.js", import.meta.url), "utf8");
-
-assert.equal(distHtml, html, "dist/index.html is stale; run npm run build");
-assert.equal(distCss, css, "dist/styles.css is stale; run npm run build");
-assert.equal(distJs, js, "dist/app.js is stale; run npm run build");
+const read = (path) => readFile(new URL(`../${path}`, import.meta.url), "utf8");
+const html = await read("src/index.html");
+const main = await read("src/js/main.js");
 
 for (const id of [
-  "editorCanvas", "filmstripList", "presetDrawer", "presetList", "presetFileInput",
-  "previousSettingsButton", "undoButton", "exportDialog", "maskControls",
-  "presetDrawerHandle", "hslHueControls", "hslSaturationControls", "hslLuminanceControls",
-  "maskGeometryOverlay", "gradientGuide", "radialGuide"
+  "editorCanvas", "canvasViewport", "imageFrame", "frameOverlay", "filmstripList", "presetDrawer", "presetList",
+  "presetFileInput", "presetPreviewCanvas", "presetAmountRange", "savePresetButton", "previousSettingsButton",
+  "copySettingsButton", "pasteSettingsButton", "syncSettingsButton", "undoButton", "redoButton", "exportDialog",
+  "deliverySelect", "resizeSelect", "keepExifToggle", "exportProgress", "maskList", "maskControls", "histogramCanvas",
+  "curveCanvas", "gradeWheels", "cropBar", "cropAngleRange", "clippingButton", "eyedropperButton", "autoToneButton",
+  "restoreCard", "settingsDialog", "nameDialog", "shortcutsDialog", "hslHueControls", "hslSaturationControls", "hslLuminanceControls",
 ]) {
-  assert.match(html, new RegExp(`id=["']${id}["']`), `missing #${id}`);
+  assert.match(html, new RegExp(`id=["']${id}["']`), `thiếu #${id}`);
 }
+assert.match(html, /<script type="module" src="\.\/app\.js"><\/script>/, "app.js phải được nạp dạng module");
+assert.match(html, />LUMA</, "thương hiệu LUMA viết hoa");
+assert.match(html, /id="presetDrawer"[^>]*\binert\b/, "ngăn preset đóng phải có inert");
+assert.doesNotMatch(html, /<button[^>]*>\s*<span[^>]*thumb-select/, "không lồng nút trong nút");
 
-for (const feature of [
-  "copyPreviousSettings", "undoLastAction", "parseLightroomPreset", "importPresetFiles",
-  "exportImages", "paintMask", "toggleFullscreen", "updateGeometricMask", "syncMaskGeometryOverlay"
+for (const fn of [
+  "undo", "redo", "applyPreset", "applyPresetSettings", "importPresetFiles", "saveCurrentAsPreset", "deletePreset",
+  "exportImages", "renderPhotoToBlob", "startBrushStroke", "updateMaskGeometry", "updateCropGesture", "sampleWhiteBalance",
+  "runAutoTone", "openSettingsDialog", "pasteSettings", "copyPreviousSettings", "removePhoto", "restoreSession", "toggleFullscreen",
 ]) {
-  assert.match(js, new RegExp(`function\\s+${feature}\\b`), `missing ${feature}()`);
+  assert.match(main, new RegExp(`function\\s+${fn}\\b`), `thiếu ${fn}()`);
 }
-
-assert.match(css, /--accent:\s*#19c9f2/i, "ocean-blue accent is missing");
-assert.match(css, /--bg:\s*#2d2f32/i, "neutral gray background is missing");
-assert.match(css, /\.drawer-handle\.open/, "moving preset drawer handle is missing");
-assert.match(css, /input\.color-track/, "colored slider tracks are missing");
-assert.match(js, /applyHslMix\(/, "WebGL HSL processing is missing");
-assert.match(js, /type === "gradient" \? 3/, "linear gradient mask mode is missing");
-assert.match(js, /type === "radial" \? 4/, "radial mask mode is missing");
-assert.doesNotMatch(js, /preset-list-swatch/, "preset list should not render thumbnail swatches");
-assert.doesNotMatch(css, /#e92cae|#7847ff/i, "old pink-purple theme remains");
-assert.match(html, />LUMA</, "brand must be uppercase LUMA");
-
-console.log("LUMA smoke checks passed.");
+for (const module of ["config", "settings", "renderer", "geometry", "presets", "curve", "color", "widgets", "controls", "zip", "jpeg-meta", "storage"]) {
+  await read(`src/js/${module}.js`);
+}
+console.log("✓ LUMA smoke checks passed.");

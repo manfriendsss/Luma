@@ -1,0 +1,27 @@
+s = {
+	id = "8F1C",
+	internalName = "Old Film",
+	title = "Old Film",
+	type = "Develop",
+	value = {
+		settings = {
+			Blacks2012 = 15,
+			Contrast2012 = -10,
+			Exposure2012 = 0.2,
+			ParametricShadows = 20,
+			ParametricHighlights = -15,
+			SplitToningHighlightHue = 45,
+			SplitToningHighlightSaturation = 18,
+			Temperature = 6500,
+			Tint = 12,
+			ToneCurvePV2012 = {
+				0,
+				0,
+				255,
+				255,
+			},
+		},
+		uuid = "8F1C",
+	},
+	version = 0,
+}
