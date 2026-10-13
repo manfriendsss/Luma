@@ -2,6 +2,8 @@
 
 LUMA là trình chỉnh màu ảnh local-first lấy cảm hứng từ Lightroom, chạy trực tiếp trong Chrome hoặc Edge bằng WebGL 2. Ảnh được xử lý trên thiết bị và không tải lên dịch vụ bên ngoài.
 
+**Production:** https://luma-photo-editor.pages.dev/
+
 ## Chạy ứng dụng
 
 Trên Windows, nhấp đúp shortcut `Luma` hoặc `Luma.bat` trên Desktop.
@@ -59,3 +61,10 @@ Mã nguồn chính nằm trong `src/`; `npm run build` tạo bản chạy tĩnh 
 - Build output directory: `dist`
 
 Sau khi liên kết repository GitHub với Cloudflare Pages, mỗi lần push lên `main` sẽ tự build và deploy. WebGL, nhập ảnh và xuất ảnh vẫn chạy cục bộ trên thiết bị người dùng.
+
+Project hiện tại cũng có thể deploy thủ công từ bản build bằng:
+
+```powershell
+npm run build
+wrangler pages deploy dist --project-name luma-photo-editor --branch main
+```
