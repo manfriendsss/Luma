@@ -56,6 +56,8 @@ LUMA là trình chỉnh màu ảnh **miễn phí và mã nguồn mở** lấy c�
 - HSL cho 8 dải màu; phân màu vùng tối, trung tính, vùng sáng và toàn cục.
 - Kết cấu, độ nét cục bộ, khử sương, tối góc, hạt phim, làm nét và giảm nhiễu.
 - Tự động cân bằng tông và công cụ chấm cân bằng trắng.
+- Ống kính: méo hình (barrel/pincushion) và khử viền màu.
+- Làm nét đầu ra khi xuất (màn hình / in).
 
 #### Quy trình nhiều ảnh
 
@@ -65,6 +67,13 @@ LUMA là trình chỉnh màu ảnh **miễn phí và mã nguồn mở** lấy c�
 - Lệnh **Ảnh trước** để áp dụng thiết lập từ ảnh liền trước.
 - Hoàn tác bằng `Ctrl+Z`, làm lại bằng `Ctrl+Shift+Z`; mỗi ảnh có lịch sử riêng.
 - Tự lưu phiên làm việc vào IndexedDB để có thể tiếp tục sau khi tải lại trang.
+- **Mở thư mục**: đọc/ghi thiết lập vào file `<ảnh>.luma.json` cạnh ảnh gốc (Chrome/Edge).
+- Chấm sao 0–5, cờ chọn/loại (`P`/`X`/`U`) và bộ lọc filmstrip (sao, cờ, đã/chưa chỉnh, đã chọn).
+- Ctrl + bấm / Shift + bấm để chọn nhiều ảnh.
+- Bản sao ảo (`Ctrl+'`) để thử nhiều phiên bản chỉnh trên cùng một ảnh.
+- Bảng **Lịch sử** có tên từng bước, bấm để quay lại; **Snapshot** lưu trạng thái đặt tên.
+- Menu **Thiết lập ▾** gom Ảnh trước, Sao chép, Dán, Đồng bộ, Bản sao ảo, Đặt lại.
+- Giải mã ảnh tuần tự và chỉ giữ tối đa 2 ảnh trong bộ nhớ, mở được nhiều ảnh lớn.
 
 #### Mask và chỉnh sửa cục bộ
 
@@ -72,15 +81,18 @@ LUMA là trình chỉnh màu ảnh **miễn phí và mã nguồn mở** lấy c�
 - Cọ vùng với kích thước, độ mềm, lưu lượng và chế độ tẩy.
 - Mask Gradient và Oval có thể di chuyển, đổi kích thước, xoay và điều chỉnh độ mềm.
 - Tối đa 8 mask trên mỗi ảnh; hỗ trợ đảo vùng, nhân bản, ẩn/hiện và lớp phủ mask.
+- Mask **Dải sáng** và **Dải màu** (chấm màu trên ảnh); mọi mask có thể tinh chỉnh thêm theo độ sáng hoặc màu.
+- Bấm vào vùng trống hoặc nút × trên nhãn để thoát chỉnh mask; `Delete` xoá mask đang chọn.
 
 #### Preset và xuất ảnh
 
 - Nhập preset Lightroom `.xmp`, `.lrtemplate` và preset LUMA `.json`.
-- Xem trước preset khi rê chuột và điều chỉnh cường độ từ 0–150%.
+- Xem trước preset ngay trên ảnh chính khi rê chuột và điều chỉnh cường độ từ 0–150%.
 - Lưu, đổi tên, xóa và xuất preset LUMA hoặc XMP.
 - Xuất hàng loạt JPEG, PNG hoặc WebP; giới hạn cạnh dài hoặc giữ nguyên kích thước.
 - Tải từng file, chọn thư mục lưu hoặc đóng gói thành ZIP.
 - Giữ EXIF cho JPEG và mặc định loại bỏ dữ liệu vị trí GPS.
+- Preset xuất (có sẵn và tự lưu), mẫu tên file với `{name}` `{date}` `{n}` `{w}` `{h}` `{rating}` `{preset}`.
 
 #### Công cụ xem và bố cục
 
@@ -89,6 +101,10 @@ LUMA là trình chỉnh màu ảnh **miễn phí và mã nguồn mở** lấy c�
 - Zoom 1:1 và lớn hơn, kéo ảnh, toàn màn hình và bảng phím tắt.
 - Cắt, nắn thẳng, xoay 90° và lật ảnh theo cách không phá huỷ.
 - Tự đọc EXIF Orientation để hiển thị ảnh đúng chiều.
+- Lưới cắt (một phần ba, tỉ lệ vàng, đường chéo, lưới) và đổi chiều khung cắt.
+- Bảng chỉnh bên phải là drawer có tay nắm: tự đóng và khoá khi chưa có ảnh.
+- Mỗi nhóm chỉnh có chấm báo đã chỉnh, nút mắt để bật/tắt nhanh, chế độ Solo và Thu gọn tất cả.
+- Giao diện Tiếng Việt / English.
 
 ### Dùng ngay
 
@@ -126,6 +142,12 @@ Mở `http://127.0.0.1:4173`. Không cần chạy `npm install` cho chế độ 
 | `O` | Bật/tắt lớp phủ mask |
 | `J` | Cảnh báo vùng sáng/tối bị cắt |
 | `←` / `→` | Chuyển ảnh |
+| `T` / `Shift+T` | Mở/đóng bảng chỉnh / ngăn preset |
+| `0`–`5` | Chấm sao |
+| `P` / `X` / `U` | Chọn / loại / bỏ cờ |
+| `Delete` | Xoá mask đang chọn |
+| `X` / `O` (khi cắt) | Đổi chiều khung / đổi lưới |
+| `Ctrl+'` | Tạo bản sao ảo |
 | `?` | Mở bảng phím tắt |
 
 ### Phát triển và kiểm thử
@@ -151,7 +173,14 @@ npm run test:e2e
 | Đường dẫn | Vai trò |
 | --- | --- |
 | `src/` | Mã nguồn ứng dụng và giao diện |
-| `src/js/main.js` | Trạng thái, lịch sử, tương tác và quy trình xuất ảnh |
+| `src/js/main.js` | Khởi động, thanh công cụ và phím tắt |
+| `src/js/core.js` | Trạng thái chung, lịch sử hoàn tác, toast |
+| `src/js/photos.js` | Nhập ảnh, giải mã, bộ nhớ, thư mục và sidecar |
+| `src/js/view.js` | Khung xem, zoom, cọ, mask, cắt |
+| `src/js/panel.js` | Bảng chỉnh, mask, lịch sử, snapshot |
+| `src/js/filmstrip.js` | Filmstrip, sao, cờ, bộ lọc |
+| `src/js/presets-ui.js`, `dialogs.js`, `export.js` | Preset, menu thiết lập, xuất ảnh |
+| `src/js/session.js`, `i18n.js` | Tự lưu phiên, song ngữ |
 | `src/js/renderer.js` | Pipeline màu, mask, crop và tiled rendering bằng WebGL 2 |
 | `src/js/presets.js` | Đọc và ghi preset Lightroom/LUMA |
 | `src/js/curve.js` | Đường cong tông và LUT |
@@ -216,6 +245,8 @@ The app runs in Chrome or Edge and uses WebGL 2 for GPU-accelerated image proces
 - Eight-channel HSL mixer and color grading for shadows, midtones, highlights, and global color.
 - Texture, clarity, dehaze, vignette, film grain, sharpening, and noise reduction.
 - Automatic tone adjustment and a white-balance picker.
+- Lens corrections: distortion (barrel/pincushion) and defringe.
+- Output sharpening on export (screen / print).
 
 #### Multi-image workflow
 
@@ -225,6 +256,13 @@ The app runs in Chrome or Edge and uses WebGL 2 for GPU-accelerated image proces
 - Apply the previous photo's settings with the **Previous** action.
 - Undo with `Ctrl+Z` and redo with `Ctrl+Shift+Z`; every photo has its own history.
 - Resume work after a reload with automatic IndexedDB session storage.
+- **Open folder**: read/write settings to `<image>.luma.json` sidecars next to the originals (Chrome/Edge).
+- 0–5 star ratings, pick/reject flags (`P`/`X`/`U`) and filmstrip filters (stars, flags, edited/unedited, selected).
+- Ctrl+click / Shift+click multi-selection.
+- Virtual copies (`Ctrl+'`) to try several versions of one photo.
+- Named **History** panel (click a step to jump back) and named **Snapshots**.
+- **Settings ▾** menu grouping Previous, Copy, Paste, Sync, Virtual copy, and Reset.
+- Sequential decoding with at most two full images in memory, so large batches stay light.
 
 #### Masks and local adjustments
 
@@ -232,15 +270,18 @@ The app runs in Chrome or Edge and uses WebGL 2 for GPU-accelerated image proces
 - Brush masks with size, feather, flow, and erase controls.
 - Draggable Gradient and Oval masks with resize, rotation, and feather controls.
 - Up to eight masks per image, with invert, duplicate, visibility, and overlay options.
+- **Luminance range** and **Color range** masks (pick a color on the image); any mask can be refined by luminance or color.
+- Click empty space or the × on the mask badge to stop editing a mask; `Delete` removes the selected mask.
 
 #### Presets and export
 
 - Import Lightroom `.xmp`, `.lrtemplate`, and LUMA `.json` presets.
-- Preview presets on hover and adjust their strength from 0–150%.
+- Preview presets on the main image on hover and adjust their strength from 0–150%.
 - Save, rename, delete, and export presets as LUMA JSON or XMP.
 - Batch-export JPEG, PNG, or WebP at full size or with a maximum long edge.
 - Download individual files, write to a selected folder, or package results as ZIP.
 - Preserve JPEG EXIF metadata while removing GPS location data by default.
+- Export presets (built-in and custom) and file-name templates with `{name}` `{date}` `{n}` `{w}` `{h}` `{rating}` `{preset}`.
 
 #### Viewing and geometry tools
 
@@ -249,6 +290,10 @@ The app runs in Chrome or Edge and uses WebGL 2 for GPU-accelerated image proces
 - True 1:1 zoom and beyond, pan, fullscreen mode, and a shortcut reference.
 - Non-destructive crop, straighten, 90° rotation, and flip.
 - EXIF Orientation support for correctly displayed source images.
+- Crop overlays (thirds, golden ratio, diagonals, grid) and crop orientation swap.
+- The right adjustments panel is a drawer with a handle; it stays closed and locked until a photo is loaded.
+- Each section shows a modified dot, an eye button for quick bypass, plus Solo mode and Collapse all.
+- Vietnamese / English interface.
 
 ### Try it online
 
@@ -286,6 +331,12 @@ Open `http://127.0.0.1:4173`. A normal local run does not require `npm install` 
 | `O` | Toggle mask overlay |
 | `J` | Toggle clipping warnings |
 | `←` / `→` | Navigate photos |
+| `T` / `Shift+T` | Toggle adjustments panel / preset drawer |
+| `0`–`5` | Star rating |
+| `P` / `X` / `U` | Pick / reject / unflag |
+| `Delete` | Delete the selected mask |
+| `X` / `O` (while cropping) | Swap orientation / cycle overlay |
+| `Ctrl+'` | Create a virtual copy |
 | `?` | Open the shortcut guide |
 
 ### Development and testing
@@ -311,7 +362,14 @@ npm run test:e2e
 | Path | Responsibility |
 | --- | --- |
 | `src/` | Application source and interface |
-| `src/js/main.js` | State, history, interaction, and export workflow |
+| `src/js/main.js` | Bootstrap, toolbar, and keyboard shortcuts |
+| `src/js/core.js` | Shared state, undo history, toasts |
+| `src/js/photos.js` | Import, decoding, memory, folders, and sidecars |
+| `src/js/view.js` | Viewport, zoom, brush, masks, crop |
+| `src/js/panel.js` | Adjustments panel, masks, history, snapshots |
+| `src/js/filmstrip.js` | Filmstrip, ratings, flags, filters |
+| `src/js/presets-ui.js`, `dialogs.js`, `export.js` | Presets, settings menu, export |
+| `src/js/session.js`, `i18n.js` | Autosave and bilingual UI |
 | `src/js/renderer.js` | WebGL 2 color pipeline, masks, crop, and tiled rendering |
 | `src/js/presets.js` | Lightroom/LUMA preset import and export |
 | `src/js/curve.js` | Tone curves and LUT generation |

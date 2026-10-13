@@ -1,4 +1,4 @@
-import { valueDefaults, maskValueDefaults, settingGroups } from "./config.js";
+import { valueDefaults, maskValueDefaults, settingGroups, panelSections, controlGroups, hslGroups } from "./config.js";
 
 export const identityCurve = () => [[0, 0], [1, 1]];
 
@@ -29,6 +29,7 @@ export function defaultSettings(width = 1, height = 1) {
     grade: defaultGrade(),
     crop: defaultCrop(width, height),
     masks: [],
+    disabled: {},
     preset: "natural",
   };
 }
@@ -50,9 +51,15 @@ export function createMask(type) {
     linear: { start: { x: 0.5, y: 0.15 }, end: { x: 0.5, y: 0.55 } },
     radial: { center: { x: 0.5, y: 0.5 }, rx: 0.28, ry: 0.2, rotation: 0 },
     values: { ...maskValueDefaults },
+    // Giới hạn thêm theo dải sáng / dải màu (giao với vùng chọn). Mask "luma"/"color" luôn dùng dải tương ứng.
+    range: defaultRange(type === "color" ? "color" : type === "luma" ? "luma" : "none"),
     // Dữ liệu cọ: { width, height, data: Uint8Array } – được chia sẻ (không sao chép) giữa các bước lịch sử.
     brush: null,
   };
+}
+
+export function defaultRange(type = "none") {
+  return { type, lo: 25, hi: 75, feather: 15, hue: 210, sat: 40, tolerance: 30, invert: false };
 }
 
 const clonePoints = (points) => points.map(([x, y]) => [x, y]);
@@ -75,6 +82,7 @@ export function cloneMask(mask, { keepBrush = true } = {}) {
     linear: { start: { ...mask.linear.start }, end: { ...mask.linear.end } },
     radial: { ...mask.radial, center: { ...mask.radial.center } },
     values: { ...mask.values },
+    range: { ...defaultRange(), ...(mask.range || {}) },
     brush: keepBrush ? mask.brush : null,
   };
 }
@@ -87,8 +95,83 @@ export function cloneSettings(settings) {
     grade: cloneGrade(settings.grade),
     crop: { ...settings.crop },
     masks: settings.masks.map((m) => cloneMask(m)),
+    disabled: { ...(settings.disabled || {}) },
     preset: settings.preset ?? null,
   };
+}
+
+/** Thiết lập thực sự được render: các nhóm đang "tạm tắt" trả về mặc định. */
+export function effectiveSettings(settings) {
+  const disabled = settings.disabled || {};
+  if (!Object.values(disabled).some(Boolean)) return settings;
+  const out = cloneSettings(settings);
+  for (const section of panelSections) {
+    if (!disabled[section.id]) continue;
+    if (section.keys) for (const k of section.keys) out.values[k] = valueDefaults[k];
+    if (section.id === "hsl") for (const c of Object.values(hslGroups).flat()) out.values[c.id] = 0;
+    if (section.id === "curve") out.curve = defaultCurve();
+    if (section.id === "grade") out.grade = defaultGrade();
+    if (section.id === "masks") out.masks = out.masks.map((m) => ({ ...m, visible: false }));
+  }
+  return out;
+}
+
+/** Nhóm có khác mặc định không (để hiện dấu chấm trên tiêu đề). */
+export function sectionModified(settings, sectionId) {
+  const section = panelSections.find((s) => s.id === sectionId);
+  if (!section) return false;
+  if (section.keys) return section.keys.some((k) => Math.abs((settings.values[k] ?? 0) - valueDefaults[k]) > 1e-9);
+  if (sectionId === "hsl") return Object.values(hslGroups).flat().some((c) => settings.values[c.id]);
+  if (sectionId === "curve") return Object.values(settings.curve).some((p) => !isIdentityCurve(p));
+  if (sectionId === "grade") {
+    const g = settings.grade;
+    return g.blending !== 50 || g.balance !== 0 || ["shadows", "midtones", "highlights", "global"].some((z) => g[z].s || g[z].l);
+  }
+  if (sectionId === "masks") return settings.masks.length > 0;
+  return false;
+}
+
+/* ---------- Nén dữ liệu cọ (RLE) để lưu file .luma.json ---------- */
+
+export function encodeBrush(brush) {
+  if (!brush) return null;
+  const { data } = brush;
+  const out = [];
+  let i = 0;
+  while (i < data.length) {
+    const v = data[i];
+    let run = 1;
+    while (i + run < data.length && data[i + run] === v && run < 65535) run++;
+    out.push(v, run & 255, run >> 8);
+    i += run;
+  }
+  const bytes = Uint8Array.from(out);
+  let binary = "";
+  for (let k = 0; k < bytes.length; k += 0x8000) binary += String.fromCharCode(...bytes.subarray(k, k + 0x8000));
+  return { width: brush.width, height: brush.height, rle: btoa(binary) };
+}
+
+export function decodeBrush(encoded) {
+  if (!encoded?.rle) return null;
+  const binary = atob(encoded.rle);
+  const data = new Uint8Array(encoded.width * encoded.height);
+  let o = 0;
+  for (let i = 0; i + 2 < binary.length; i += 3) {
+    const v = binary.charCodeAt(i);
+    const run = binary.charCodeAt(i + 1) | (binary.charCodeAt(i + 2) << 8);
+    data.fill(v, o, o + run);
+    o += run;
+  }
+  return { width: encoded.width, height: encoded.height, data, version: `f${Math.random().toString(36).slice(2, 9)}` };
+}
+
+/** Thiết lập → JSON có thể ghi ra file (cọ được nén). */
+export function serializeSettings(settings) {
+  return { ...cloneSettings(settings), masks: settings.masks.map((m) => ({ ...cloneMask(m, { keepBrush: false }), brush: encodeBrush(m.brush) })) };
+}
+
+export function deserializeMasks(masks) {
+  return (masks || []).map((m) => ({ ...m, brush: m.brush && m.brush.rle ? decodeBrush(m.brush) : m.brush }));
 }
 
 function stableStringify(value) {

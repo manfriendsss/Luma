@@ -167,6 +167,7 @@ export class CurveEditor {
     const moves = { ArrowUp: [0, step], ArrowDown: [0, -step], ArrowLeft: [-step, 0], ArrowRight: [step, 0] };
     if (moves[e.key]) {
       e.preventDefault();
+      e.stopPropagation();
       this.onBegin?.();
       pt[0] = Math.min(1, Math.max(0, pt[0] + moves[e.key][0]));
       pt[1] = Math.min(1, Math.max(0, pt[1] + moves[e.key][1]));
@@ -174,6 +175,7 @@ export class CurveEditor {
       this.emit(true);
     } else if ((e.key === "Delete" || e.key === "Backspace") && this.selected > 0 && this.selected < this.points.length - 1) {
       e.preventDefault();
+      e.stopPropagation();
       this.onBegin?.();
       this.points.splice(this.selected, 1);
       this.selected = null;
@@ -272,6 +274,7 @@ export class ColorWheel {
       const m = map[e.key];
       if (!m) return;
       e.preventDefault();
+      e.stopPropagation();
       this.onBegin?.();
       const next = { ...this.value };
       const step = m[1] * (e.shiftKey ? 5 : 1);

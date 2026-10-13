@@ -10,7 +10,13 @@ import {
   cropRectInView, cropFromViewRect, applyAspect,
 } from "../src/js/geometry.js";
 import { whiteBalanceMultipliers, neutralizeWhiteBalance, autoTone, analyzePixels } from "../src/js/color.js";
-import { defaultSettings, cloneSettings, settingsEqual, mergeSettingGroups, createMask } from "../src/js/settings.js";
+import {
+  defaultSettings, cloneSettings, settingsEqual, mergeSettingGroups, createMask, effectiveSettings, sectionModified,
+  encodeBrush, decodeBrush, serializeSettings, deserializeMasks,
+} from "../src/js/settings.js";
+import { lensParams } from "../src/js/geometry.js";
+import { formatFileName } from "../src/js/export.js";
+import { translate } from "../src/js/i18n.js";
 
 const fixture = (name) => new URL(`./fixtures/${name}`, import.meta.url);
 let passed = 0;
@@ -276,6 +282,77 @@ await test("Thiết lập: sao chép sâu, so sánh, ghép nhóm", () => {
   assert.equal(merged.masks[0].type, "radial");
   const portrait = mergeSettingGroups(defaultSettings(600, 900), { ...a, __size: { width: 1000, height: 800 } }, ["crop"], { width: 600, height: 900 });
   assert.deepEqual([portrait.crop.w, portrait.crop.h], [600, 900], "không cắt ảnh đích khi ảnh nguồn chưa cắt");
+});
+
+/* ---------- Phần mới ---------- */
+
+await test("Méo ống kính: ánh xạ hai chiều khớp nhau, góc ảnh không lộ viền", () => {
+  const W = 1600, H = 1000;
+  for (const distortion of [60, -60]) {
+    const lens = lensParams(distortion, W, H);
+    const crop = { cx: W / 2, cy: H / 2, w: W, h: H, angle: 3, quarter: 0, flip: false };
+    for (const [u, v] of [[0.1, 0.2], [0.9, 0.85], [0.5, 0.5]]) {
+      const s = outputToSource(crop, u, v, lens);
+      const back = sourceToOutput(crop, s.x, s.y, lens);
+      near(back.u, u, 1e-6); near(back.v, v, 1e-6);
+    }
+    const corner = outputToSource({ ...crop, angle: 0 }, 0, 0, lens);
+    assert.ok(corner.x >= -1e-6 && corner.y >= -1e-6, `góc nằm trong ảnh (${distortion}): ${corner.x},${corner.y}`);
+  }
+  assert.equal(lensParams(0, W, H), null);
+});
+
+await test("Tạm tắt nhóm: thiết lập hiệu lực trả về mặc định cho nhóm đó", () => {
+  const s = defaultSettings(100, 100);
+  s.values.exposure = 1; s.values.contrast = 20; s.values.hslSatRed = 30;
+  s.curve.master = [[0, 0.1], [1, 1]];
+  s.masks.push(createMask("radial"));
+  assert.ok(sectionModified(s, "light") && sectionModified(s, "hsl") && sectionModified(s, "curve") && sectionModified(s, "masks"));
+  assert.ok(!sectionModified(s, "grade"));
+  s.disabled = { light: true, curve: true, masks: true };
+  const e = effectiveSettings(s);
+  assert.equal(e.values.exposure, 0);
+  assert.equal(e.values.hslSatRed, 30);
+  assert.deepEqual(e.curve.master, [[0, 0], [1, 1]]);
+  assert.equal(e.masks[0].visible, false);
+  assert.equal(s.values.exposure, 1, "không sửa thiết lập gốc");
+  assert.equal(effectiveSettings(defaultSettings(10, 10)).values.exposure, 0);
+});
+
+await test("Nén cọ RLE và (de)serialize thiết lập cho file .luma.json", () => {
+  const data = new Uint8Array(1600 * 1200);
+  data.fill(255, 10000, 250000);
+  data.fill(77, 500000, 500050);
+  const encoded = encodeBrush({ width: 1600, height: 1200, data });
+  assert.ok(encoded.rle.length < 2000, `nén tốt: ${encoded.rle.length} ký tự`);
+  const decoded = decodeBrush(encoded);
+  assert.ok(decoded.data.every((v, i) => v === data[i]));
+  const s = defaultSettings(1600, 1200);
+  const brush = createMask("brush");
+  brush.brush = { width: 1600, height: 1200, data, version: "v" };
+  s.masks.push(brush);
+  const json = JSON.parse(JSON.stringify(serializeSettings(s)));
+  const masks = deserializeMasks(json.masks);
+  assert.equal(masks[0].brush.data[20000], 255);
+});
+
+await test("Mẫu tên file xuất", () => {
+  const photo = { name: "IMG_001.JPG", rating: 4, settings: { preset: null } };
+  const date = new Date(2026, 9, 14, 8, 5);
+  assert.equal(formatFileName("{name}-{date}-{n}", photo, { index: 7, date }), "IMG_001-2026-10-14-007");
+  assert.equal(formatFileName("{name}_{w}x{h}_{rating}", photo, { width: 2048, height: 1365 }), "IMG_001_2048x1365_4sao");
+  assert.equal(formatFileName("a/b:c*{name}", photo), "a-b-c-IMG_001", "bỏ ký tự không hợp lệ");
+  assert.equal(formatFileName("{name}", { ...photo, name: "IMG_001.JPG (bản sao 2)" }), "IMG_001-v2");
+  assert.equal(formatFileName("{name}", { ...photo, name: "IMG_002 (bản sao 2)" }), "IMG_002-v2");
+});
+
+await test("Dịch giao diện: chuỗi tĩnh, chuỗi có biến và nhãn vùng chọn", () => {
+  assert.equal(translate("Phơi sáng"), "Exposure");
+  assert.equal(translate("  Xuất ảnh "), "  Export ");
+  assert.equal(translate("Đã thêm 12 ảnh."), "Added 12 photo(s).");
+  assert.equal(translate("Đang chỉnh: Dải màu 2 · lớp phủ"), "Editing: Color range 2 · overlay");
+  assert.equal(translate("Oval 1: Phơi sáng"), "Oval 1: Exposure");
+  assert.equal(translate("tên-file-người-dùng.jpg"), null, "không dịch nội dung của người dùng");
 });
 
 if (failures.length) {

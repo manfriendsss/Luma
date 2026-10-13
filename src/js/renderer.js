@@ -6,9 +6,11 @@
 import { MAX_MASKS, hslColors } from "./config.js";
 import { buildCurveLut, LUT_SIZE } from "./curve.js";
 import { whiteBalanceMultipliers, hueToRgb, luma } from "./color.js";
-import { cropMatrix, outputSize } from "./geometry.js";
+import { cropMatrix, outputSize, lensParams } from "./geometry.js";
+import { effectiveSettings } from "./settings.js";
 
-const MASK_TYPE_CODE = { sky: 1, brush: 2, linear: 3, radial: 4 };
+const MASK_TYPE_CODE = { sky: 1, brush: 2, linear: 3, radial: 4, luma: 5, color: 5 };
+const RANGE_CODE = { none: 0, luma: 1, color: 2 };
 
 const vertexShaderSource = `#version 300 es
 in vec2 a_pos;
@@ -40,7 +42,9 @@ uniform vec4 u_tone;      // contrast, highlights, shadows, whites
 uniform float u_blacks;
 uniform vec4 u_presence;  // texture, clarity, dehaze, vibrance
 uniform float u_saturation;
-uniform vec4 u_detail;    // sharpen, noise, colorNoise, -
+uniform vec4 u_detail;    // sharpen, noise, colorNoise, defringe
+uniform vec4 u_lens;      // k, s, 1/R², hiệu lực
+uniform float u_outSharpen;
 uniform vec4 u_fx;        // vignette, grain, grainSize, seed
 uniform vec4 u_hslHue[2];
 uniform vec4 u_hslSat[2];
@@ -57,6 +61,8 @@ uniform vec4 u_mD[${MAX_MASKS}];  // defringe, strength, type, invert
 uniform vec3 u_mWB[${MAX_MASKS}];
 uniform vec4 u_mG1[${MAX_MASKS}]; // linear: start.xy end.xy | radial: center.xy radius.xy (px)
 uniform vec4 u_mG2[${MAX_MASKS}]; // cos, sin, feather, layer
+uniform vec4 u_mR[${MAX_MASKS}];  // loại dải (0 không, 1 sáng, 2 màu), lo, hi, độ mềm
+uniform vec4 u_mR2[${MAX_MASKS}]; // sắc độ (0..1), dung sai, bão hoà tối thiểu, đảo dải
 uniform int u_overlayMask;
 uniform int u_clipping;
 
@@ -201,12 +207,32 @@ float maskValue(int i, vec2 px, vec2 uv, vec3 sourceGamma) {
     float f = max(0.01, g2.z);
     m = 1.0 - smoothstep(1.0 - f, 1.0, r);
   }
+  else if (type == 5) m = 1.0;
   if (d.w > 0.5) m = 1.0 - m;
+  vec4 r = u_mR[i];
+  if (r.x > 0.5) {
+    float w = 1.0;
+    if (r.x < 1.5) {
+      float l = luminance(sourceGamma);
+      w = smoothstep(r.y - r.w, r.y, l) * (1.0 - smoothstep(r.z, r.z + r.w, l));
+    } else {
+      vec3 hsv = rgbToHsv(clamp(sourceGamma, 0.0, 1.0));
+      vec4 r2 = u_mR2[i];
+      float dist = hueDistance(hsv.x, r2.x);
+      w = (1.0 - smoothstep(r2.y, r2.y + 0.06, dist)) * smoothstep(r2.z * 0.5, r2.z + 0.02, hsv.y);
+    }
+    if (u_mR2[i].w > 0.5) w = 1.0 - w;
+    m *= w;
+  }
   return clamp(m * d.y, 0.0, 1.0);
 }
 
 void main() {
   vec2 px = u_cropCenter + u_cropMat * (v_out - 0.5);
+  if (u_lens.w > 0.5) {
+    vec2 d = px - u_imageSize * 0.5;
+    px = u_imageSize * 0.5 + d * u_lens.y * (1.0 + u_lens.x * dot(d, d) * u_lens.z);
+  }
   vec2 uv = px / u_imageSize;
   if (any(lessThan(uv, vec2(0.0))) || any(greaterThan(uv, vec2(1.0)))) { outColor = vec4(u_bg, 1.0); return; }
 
@@ -240,6 +266,17 @@ void main() {
   c -= vec3(luminance(dFine)) * u_detail.y * 0.95;
   vec3 chromaDetail = (dFine + dTexture) - vec3(luminance(dFine + dTexture));
   c -= chromaDetail * u_detail.z * 0.95;
+
+  if (u_detail.w > 0.0) {
+    float fringeEdge = clamp(length(srcGamma - blurTexture) * 5.0, 0.0, 1.0);
+    float fp = smoothstep(0.0, 0.08, min(c.r, c.b) - c.g);
+    float fg = smoothstep(0.0, 0.08, c.g - max(c.r, c.b));
+    c = mix(c, vec3(luminance(c)), u_detail.w * fringeEdge * max(fp, fg));
+  }
+  if (u_outSharpen > 0.0) {
+    vec3 blurOut = toGamma(ringBlur(px, max(1.0, u_pxPerScreen)));
+    c += (srcGamma - blurOut) * u_outSharpen;
+  }
 
   c = applyDehaze(c, u_presence.z);
   c = applyTones(c, u_tone.x, u_tone.y, u_tone.z, u_tone.w, u_blacks);
@@ -440,7 +477,8 @@ export class Renderer {
     this.curveKey = key;
   }
 
-  setUniforms(settings, { crop, pxPerScreen, original = false, overlayMask = -1, clipping = false, background = [0.16, 0.17, 0.18] }) {
+  setUniforms(rawSettings, { crop, pxPerScreen, original = false, overlayMask = -1, clipping = false, background = [0.16, 0.17, 0.18], outputSharpen = 0 }) {
+    const settings = effectiveSettings(rawSettings);
     const gl = this.gl;
     const u = this.uniforms;
     const v = settings.values;
@@ -462,7 +500,10 @@ export class Renderer {
     gl.uniform1f(u.u_blacks, v.blacks / 100);
     gl.uniform4f(u.u_presence, v.texture / 100, v.clarity / 100, v.dehaze / 100, v.vibrance / 100);
     gl.uniform1f(u.u_saturation, v.saturation / 100);
-    gl.uniform4f(u.u_detail, v.sharpen / 100, v.noise / 100, v.colorNoise / 100, 0);
+    gl.uniform4f(u.u_detail, v.sharpen / 100, v.noise / 100, v.colorNoise / 100, (v.defringe || 0) / 100);
+    const lens = lensParams(v.distortion, iw, ih);
+    gl.uniform4f(u.u_lens, lens?.k || 0, lens?.s || 1, lens ? 1 / (lens.R * lens.R) : 0, lens ? 1 : 0);
+    gl.uniform1f(u.u_outSharpen, outputSharpen);
     gl.uniform4f(u.u_fx, v.vignette / 100, v.grain / 100, v.grainSize / 100, 7.31);
     const pack = (prefix) => new Float32Array(hslColors.map(([id]) => v[`${prefix}${id}`] / 100));
     gl.uniform4fv(u.u_hslHue, pack("hslHue"));
@@ -489,6 +530,7 @@ export class Renderer {
     const masks = settings.masks.slice(0, MAX_MASKS).filter(Boolean);
     const A = new Float32Array(MAX_MASKS * 4), B = new Float32Array(MAX_MASKS * 4), C = new Float32Array(MAX_MASKS * 4), D = new Float32Array(MAX_MASKS * 4);
     const WB = new Float32Array(MAX_MASKS * 3), G1 = new Float32Array(MAX_MASKS * 4), G2 = new Float32Array(MAX_MASKS * 4);
+    const R = new Float32Array(MAX_MASKS * 4), R2 = new Float32Array(MAX_MASKS * 4);
     const longEdge = Math.max(iw, ih);
     settings.masks.slice(0, MAX_MASKS).forEach((mask, i) => {
       const mv = mask.values;
@@ -505,6 +547,9 @@ export class Renderer {
       }
       const rot = ((mask.radial?.rotation || 0) * Math.PI) / 180;
       G2.set([Math.cos(rot), Math.sin(rot), (mask.feather ?? 50) / 100, i], i * 4);
+      const range = mask.type === "luma" ? { ...mask.range, type: "luma" } : mask.type === "color" ? { ...mask.range, type: "color" } : (mask.range || { type: "none" });
+      R.set([RANGE_CODE[range.type] || 0, (range.lo ?? 25) / 100, (range.hi ?? 75) / 100, Math.max(0.005, (range.feather ?? 15) / 100)], i * 4);
+      R2.set([((range.hue ?? 0) % 360) / 360, (range.tolerance ?? 30) / 360, (range.sat ?? 40) / 100 * 0.6, range.invert ? 1 : 0], i * 4);
     });
     gl.uniform1i(u.u_maskCount, masks.length);
     gl.uniform4fv(u.u_mA, A);
@@ -514,6 +559,8 @@ export class Renderer {
     gl.uniform3fv(u.u_mWB, WB);
     gl.uniform4fv(u.u_mG1, G1);
     gl.uniform4fv(u.u_mG2, G2);
+    gl.uniform4fv(u.u_mR, R);
+    gl.uniform4fv(u.u_mR2, R2);
     gl.uniform1i(u.u_overlayMask, overlayMask);
     gl.uniform1i(u.u_clipping, clipping ? 1 : 0);
   }
@@ -552,7 +599,7 @@ export class Renderer {
     if (!this.imageTexture) return;
     gl.useProgram(this.program);
     this.bindTextures();
-    this.setCurve(settings.curve);
+    this.setCurve(effectiveSettings(settings).curve);
     const out = outputSize(crop);
     const pxPerScreen = out.width / rect.width;
     const toNdcX = (x) => (x / W) * 2 - 1;
@@ -586,7 +633,7 @@ export class Renderer {
    * Render vùng src (toạ độ đầu ra 0..1) vào buffer width×height, đọc pixel theo thứ tự hàng từ trên xuống.
    * pxPerScreen: số pixel ảnh gốc ứng với 1 pixel đầu ra.
    */
-  renderRegion(settings, { crop, width, height, src = [0, 0, 1, 1], pxPerScreen, original = false, target }) {
+  renderRegion(settings, { crop, width, height, src = [0, 0, 1, 1], pxPerScreen, original = false, target, outputSharpen = 0 }) {
     const gl = this.gl;
     this.ensureFbo(width, height);
     gl.bindFramebuffer(gl.FRAMEBUFFER, this.fbo);
@@ -594,8 +641,8 @@ export class Renderer {
     gl.disable(gl.SCISSOR_TEST);
     gl.useProgram(this.program);
     this.bindTextures();
-    this.setCurve(settings.curve);
-    this.setUniforms(settings, { crop, pxPerScreen, original });
+    this.setCurve(effectiveSettings(settings).curve);
+    this.setUniforms(settings, { crop, pxPerScreen, original, outputSharpen });
     // Đặt hàng đầu ảnh ở y = -1 để readPixels trả về thứ tự từ trên xuống.
     this.quad([-1, -1, 1, 1], src);
     const pixels = target || new Uint8Array(width * height * 4);
@@ -619,7 +666,7 @@ export class Renderer {
   }
 
   /** Render toàn bộ ảnh đầu ra theo từng ô để vượt giới hạn kích thước canvas/GPU. */
-  async renderTiled(settings, { crop, width, height, onTile, shouldCancel }) {
+  async renderTiled(settings, { crop, width, height, onTile, shouldCancel, outputSharpen = 0 }) {
     const tile = this.maxTileSize();
     const out = outputSize(crop);
     const pxPerScreen = out.width / width;
@@ -629,7 +676,7 @@ export class Renderer {
         const w = Math.min(tile, width - x);
         const h = Math.min(tile, height - y);
         const src = [x / width, y / height, (x + w) / width, (y + h) / height];
-        const pixels = this.renderRegion(settings, { crop, width: w, height: h, src, pxPerScreen });
+        const pixels = this.renderRegion(settings, { crop, width: w, height: h, src, pxPerScreen, outputSharpen });
         onTile({ x, y, width: w, height: h, pixels });
         await new Promise((resolve) => setTimeout(resolve, 0));
       }

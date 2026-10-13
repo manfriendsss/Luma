@@ -19,35 +19,39 @@
         </div>
 
         <div class="topbar-actions">
-          <button class="button button-ghost" id="addImagesButton" type="button">+ Thêm ảnh</button>
-          <span class="toolbar-divider" aria-hidden="true"></span>
-          <button class="button button-ghost" id="previousSettingsButton" type="button" disabled title="Sao chép toàn bộ thiết lập (trừ mask cọ) từ ảnh liền trước">Sao chép ảnh trước</button>
-          <button class="button button-ghost" id="copySettingsButton" type="button" disabled title="Sao chép thiết lập (Ctrl+Shift+C)">Sao chép</button>
-          <button class="button button-ghost" id="pasteSettingsButton" type="button" disabled title="Dán thiết lập vào ảnh đang xem (Ctrl+Shift+V)">Dán</button>
-          <button class="button button-ghost" id="syncSettingsButton" type="button" disabled title="Đồng bộ thiết lập của ảnh đang xem sang các ảnh đã chọn (Ctrl+Shift+S)">Đồng bộ</button>
+          <button class="button button-ghost" id="addImagesButton" type="button" title="Thêm ảnh (hoặc kéo thả vào cửa sổ)">+ Thêm ảnh</button>
+          <button class="button button-ghost" id="openFolderButton" type="button" title="Mở cả thư mục – thiết lập được lưu cạnh ảnh dạng .luma.json">Mở thư mục</button>
           <span class="toolbar-divider" aria-hidden="true"></span>
           <button class="button button-ghost icon-action" id="undoButton" type="button" disabled aria-label="Hoàn tác" title="Hoàn tác (Ctrl+Z)"><span aria-hidden="true">↶</span></button>
           <button class="button button-ghost icon-action" id="redoButton" type="button" disabled aria-label="Làm lại" title="Làm lại (Ctrl+Shift+Z)"><span aria-hidden="true">↷</span></button>
-          <button class="button button-ghost" id="resetButton" type="button" disabled title="Đặt lại ảnh đang xem (Shift+R)">Đặt lại</button>
+          <button class="button button-ghost menu-button" id="settingsMenuButton" type="button" aria-haspopup="menu" aria-expanded="false" aria-controls="settingsMenu" disabled>Thiết lập <span aria-hidden="true">▾</span></button>
+          <span class="toolbar-divider" aria-hidden="true"></span>
           <button class="button button-ghost icon-action" id="fullscreenButton" type="button" aria-pressed="false" aria-label="Toàn màn hình" title="Toàn màn hình (F)"><span aria-hidden="true">⛶</span></button>
           <button class="button button-ghost icon-action" id="shortcutsButton" type="button" aria-label="Phím tắt" title="Phím tắt (?)"><span aria-hidden="true">?</span></button>
+          <button class="button button-ghost icon-action lang-toggle" id="langToggle" type="button" aria-label="Switch to English" title="Switch to English">EN</button>
           <button class="button button-primary" id="exportButton" type="button" disabled title="Xuất ảnh (Ctrl+Shift+E)">Xuất ảnh</button>
         </div>
       </header>
 
-      <div class="drawer-backdrop" id="drawerBackdrop" hidden></div>
+      <ul class="menu-popover" id="settingsMenu" role="menu" aria-label="Thiết lập" hidden>
+        <li role="none"><button role="menuitem" type="button" id="menuPrevious"><span>Sao chép từ ảnh trước</span></button></li>
+        <li role="none"><button role="menuitem" type="button" id="menuCopy"><span>Sao chép thiết lập…</span><kbd>Ctrl Shift C</kbd></button></li>
+        <li role="none"><button role="menuitem" type="button" id="menuPaste"><span>Dán thiết lập</span><kbd>Ctrl Shift V</kbd></button></li>
+        <li role="none"><button role="menuitem" type="button" id="menuSync"><span>Đồng bộ sang ảnh đã chọn…</span><kbd>Ctrl Shift S</kbd></button></li>
+        <li role="separator" class="menu-separator"></li>
+        <li role="none"><button role="menuitem" type="button" id="menuVirtualCopy"><span>Tạo bản sao ảo</span><kbd>Ctrl '</kbd></button></li>
+        <li role="none"><button role="menuitem" type="button" id="menuReset" class="danger"><span>Đặt lại ảnh đang xem</span><kbd>Shift R</kbd></button></li>
+      </ul>
+
       <aside class="preset-drawer" id="presetDrawer" aria-label="Bảng bộ lọc màu" inert>
         <div class="drawer-header">
           <div><span class="eyebrow">HỒ SƠ MÀU</span><h2>BỘ LỌC MÀU</h2></div>
           <button class="drawer-close" id="presetDrawerClose" type="button" aria-label="Đóng bảng preset">×</button>
         </div>
-        <div class="preset-preview">
-          <canvas id="presetPreviewCanvas" aria-label="Xem trước preset"></canvas>
-          <div class="preset-preview-empty" id="presetPreviewEmpty">Mở ảnh để xem trước preset</div>
-          <span id="presetPreviewName">TỰ NHIÊN</span>
-        </div>
+        <p class="drawer-hint">Rê chuột lên preset để xem trước ngay trên ảnh, bấm để áp dụng.</p>
         <div class="preset-amount">
-          <label for="presetAmountRange">Cường độ preset</label>
+          <div class="preset-current"><span>Đang dùng</span><strong id="presetCurrentName">—</strong></div>
+          <label for="presetAmountRange">Cường độ</label>
           <input id="presetAmountRange" type="range" min="0" max="150" step="1" value="100" disabled />
           <output id="presetAmountValue">100%</output>
         </div>
@@ -55,10 +59,10 @@
         <div class="drawer-footer">
           <button class="button button-primary" id="savePresetButton" type="button" disabled>Lưu thiết lập hiện tại thành preset</button>
           <button class="button button-ghost import-preset-button" id="importPresetButton" type="button">Nhập preset Lightroom</button>
-          <span>Hỗ trợ XMP, LRTEMPLATE và JSON · Rê chuột để xem trước, bấm để áp dụng</span>
+          <span>Hỗ trợ XMP, LRTEMPLATE và JSON · có thể kéo thả file preset vào cửa sổ</span>
         </div>
       </aside>
-      <button class="drawer-handle" id="presetDrawerHandle" type="button" aria-label="Mở bảng preset" aria-expanded="false" aria-controls="presetDrawer" title="Mở bảng preset"><span aria-hidden="true">›</span></button>
+      <button class="drawer-handle" id="presetDrawerHandle" type="button" aria-label="Mở bảng preset (Shift+T)" aria-expanded="false" aria-controls="presetDrawer" title="Mở bảng preset (Shift+T)"><span aria-hidden="true">›</span></button>
 
       <main class="workspace">
         <section class="stage-panel" aria-label="Khu vực xem trước">
@@ -93,20 +97,33 @@
                 <span class="split-grip" aria-hidden="true"></span>
               </div>
             </div>
-            <span class="before-badge" id="beforeBadge" hidden>ẢNH GỐC</span>
-            <span class="mask-badge" id="maskBadge" hidden>VÙNG CHỌN</span>
+            <span class="before-badge stage-badge" id="beforeBadge" hidden>ẢNH GỐC</span>
+            <span class="preview-badge stage-badge" id="previewBadge" hidden></span>
+            <div class="mask-badge stage-badge" id="maskBadge" hidden>
+              <span id="maskBadgeText"></span>
+              <button type="button" id="maskBadgeExit" title="Thoát chỉnh vùng chọn (Esc)">Xong</button>
+            </div>
             <span class="brush-cursor" id="brushCursor" hidden></span>
-            <span class="pixel-readout" id="pixelReadout" hidden></span>
 
             <div class="crop-bar" id="cropBar" hidden>
               <label class="crop-field"><span>Tỉ lệ</span>
                 <select id="cropAspectSelect"></select>
               </label>
+              <button class="button button-ghost" id="swapCropButton" type="button" title="Đổi khung dọc / ngang (X)" aria-label="Đổi khung dọc / ngang">⇄</button>
               <div class="crop-field crop-straighten">
                 <label for="cropAngleRange">Nắn thẳng</label>
                 <input id="cropAngleRange" type="range" min="-45" max="45" step="0.1" value="0" />
                 <output id="cropAngleValue">0°</output>
               </div>
+              <label class="crop-field"><span>Lưới</span>
+                <select id="cropGridSelect">
+                  <option value="thirds">Một phần ba</option>
+                  <option value="grid">Lưới</option>
+                  <option value="golden">Tỉ lệ vàng</option>
+                  <option value="diagonal">Đường chéo</option>
+                  <option value="none">Không lưới</option>
+                </select>
+              </label>
               <div class="crop-buttons">
                 <button class="button button-ghost" id="rotateLeftButton" type="button" title="Xoay trái 90°" aria-label="Xoay trái 90°">⟲</button>
                 <button class="button button-ghost" id="rotateRightButton" type="button" title="Xoay phải 90°" aria-label="Xoay phải 90°">⟳</button>
@@ -126,7 +143,10 @@
               </div>
               <h1>Thả nhiều ảnh vào đây</h1>
               <p>Chọn cùng lúc nhiều file JPG, PNG hoặc WebP.</p>
-              <button class="button button-primary open-image-button" id="openImageButton" type="button">Chọn ảnh</button>
+              <div class="empty-actions">
+                <button class="button button-primary open-image-button" id="openImageButton" type="button">Chọn ảnh</button>
+                <button class="button button-ghost" id="emptyOpenFolderButton" type="button">Mở thư mục</button>
+              </div>
               <button class="sample-button" id="sampleImageButton" type="button">Dùng ảnh mẫu</button>
               <div class="restore-card" id="restoreCard" hidden>
                 <strong id="restoreTitle">Phiên làm việc trước</strong>
@@ -139,128 +159,230 @@
               <span class="privacy-note">Ảnh chỉ được xử lý và lưu trên máy — không tải lên mạng.</span>
             </div>
 
-            <div class="drop-overlay" id="dropOverlay" hidden><span>Thả để thêm ảnh</span></div>
+            <div class="drop-overlay" id="dropOverlay" hidden><span>Thả để thêm ảnh hoặc preset</span></div>
           </div>
 
           <section class="filmstrip" id="filmstripSection" aria-label="Danh sách ảnh" hidden>
             <div class="filmstrip-header">
-              <div><strong id="photoCount">0 ảnh</strong><span id="selectedCount">0 được chọn</span></div>
-              <button class="text-button" id="selectAllButton" type="button">Chọn tất cả</button>
+              <div class="filmstrip-info"><strong id="photoCount">0 ảnh</strong><span id="selectedCount">0 được chọn</span>
+                <span class="folder-chip" id="folderChip" hidden>
+                  <span class="folder-icon" aria-hidden="true">▤</span><span id="folderChipName"></span>
+                  <label class="toggle-label"><input id="sidecarToggle" type="checkbox" checked /> Lưu .luma.json</label>
+                </span>
+              </div>
+              <div class="filmstrip-tools">
+                <label class="filter-field"><span>Lọc</span>
+                  <select id="filterSelect">
+                    <option value="all">Tất cả</option>
+                    <option value="stars1">★ trở lên</option>
+                    <option value="stars2">★★ trở lên</option>
+                    <option value="stars3">★★★ trở lên</option>
+                    <option value="stars4">★★★★ trở lên</option>
+                    <option value="stars5">★★★★★</option>
+                    <option value="picked">Được chọn (cờ)</option>
+                    <option value="unrejected">Không bị loại</option>
+                    <option value="rejected">Bị loại</option>
+                    <option value="edited">Đã chỉnh</option>
+                    <option value="unedited">Chưa chỉnh</option>
+                    <option value="selected">Đang chọn (✓)</option>
+                  </select>
+                </label>
+                <button class="text-button" id="selectAllButton" type="button">Chọn tất cả</button>
+              </div>
             </div>
             <div class="filmstrip-list" id="filmstripList" role="list"></div>
+            <p class="filmstrip-empty" id="filmstripEmpty" hidden>Không có ảnh nào khớp bộ lọc.</p>
           </section>
 
           <div class="stage-footer">
             <span id="renderStatus" aria-live="polite">Sẵn sàng</span>
-            <span class="footer-hints"><kbd>\</kbd> ảnh gốc · <kbd>R</kbd> cắt · <kbd>J</kbd> cảnh báo cháy · <kbd>Space</kbd> kéo ảnh · <kbd>?</kbd> tất cả phím tắt</span>
+            <span class="footer-hints"><kbd>0</kbd>–<kbd>5</kbd> sao · <kbd>P</kbd>/<kbd>X</kbd> cờ · <kbd>T</kbd> bảng điều chỉnh · <kbd>\</kbd> ảnh gốc · <kbd>?</kbd> phím tắt</span>
+            <span class="storage-info" id="storageInfo"></span>
           </div>
+
+          <button class="panel-handle" id="panelHandle" type="button" aria-controls="controlPanel" aria-expanded="false" aria-label="Mở bảng điều chỉnh (T)" title="Mở bảng điều chỉnh (T)"><span aria-hidden="true">‹</span></button>
+          <div class="toast" id="toast" role="status" aria-live="polite"><span id="toastMessage"></span><button class="toast-action" id="toastAction" type="button" hidden></button></div>
         </section>
 
-        <aside class="control-panel" aria-label="Bảng điều chỉnh">
-          <div class="histogram-panel">
-            <canvas id="histogramCanvas" aria-label="Biểu đồ histogram"></canvas>
-            <button class="clip-indicator clip-shadows" id="shadowClipIndicator" type="button" aria-label="Cảnh báo mất chi tiết vùng tối" title="Vùng tối bị mất chi tiết"></button>
-            <button class="clip-indicator clip-highlights" id="highlightClipIndicator" type="button" aria-label="Cảnh báo cháy sáng" title="Vùng sáng bị cháy"></button>
-            <span class="histogram-info" id="histogramInfo">—</span>
+        <aside class="control-panel" id="controlPanel" aria-label="Bảng điều chỉnh" aria-hidden="true" inert>
+          <div class="panel-header">
+            <div><span class="eyebrow">ĐIỀU CHỈNH</span><h2>Bảng chỉnh ảnh</h2></div>
+            <div class="panel-header-tools">
+              <button class="chip-button" id="soloToggle" type="button" aria-pressed="false" title="Mở một nhóm thì tự đóng các nhóm khác (Alt + bấm tiêu đề cũng vậy)">Một nhóm</button>
+              <button class="chip-button" id="collapseAllButton" type="button" title="Thu gọn tất cả nhóm">Thu gọn</button>
+              <button class="drawer-close" id="panelClose" type="button" aria-label="Đóng bảng điều chỉnh">×</button>
+            </div>
           </div>
-          <div class="panel-scroll" id="panelScroll">
-            <section class="adjustment-section" data-section="light">
-              <div class="section-head">
-                <button class="section-heading section-toggle" type="button" aria-expanded="true"><div><span class="eyebrow">ÁNH SÁNG</span><h2>Tông sáng</h2></div><span class="chevron" aria-hidden="true">⌄</span></button>
-                <button class="chip-button" id="autoToneButton" type="button" disabled title="Tự động căn sáng dựa trên histogram">Tự động</button>
+          <p class="panel-lock-note" id="panelLockNote">Mở một ảnh để bắt đầu chỉnh – các thanh trượt sẽ hoạt động khi có ảnh.</p>
+          <div class="panel-body" id="panelBody">
+            <div class="histogram-panel">
+              <div class="histogram-box">
+                <canvas id="histogramCanvas" aria-label="Biểu đồ histogram"></canvas>
+                <button class="clip-indicator clip-shadows" id="shadowClipIndicator" type="button" aria-label="Cảnh báo mất chi tiết vùng tối" title="Vùng tối bị mất chi tiết (J)"></button>
+                <button class="clip-indicator clip-highlights" id="highlightClipIndicator" type="button" aria-label="Cảnh báo cháy sáng" title="Vùng sáng bị cháy (J)"></button>
               </div>
-              <div class="controls-list" id="lightControls"></div>
-            </section>
-            <section class="adjustment-section" data-section="color">
-              <div class="section-head">
-                <button class="section-heading section-toggle" type="button" aria-expanded="true"><div><span class="eyebrow">MÀU SẮC</span><h2>Cân bằng màu</h2></div><span class="chevron" aria-hidden="true">⌄</span></button>
-                <div class="head-tools">
-                  <button class="chip-button" id="eyedropperButton" type="button" aria-pressed="false" disabled title="Chấm vào vùng xám/trắng trung tính trên ảnh (W)">Chấm trắng</button>
-                  <button class="chip-button" id="autoWhiteBalanceButton" type="button" disabled title="Tự động cân bằng trắng">Tự động</button>
+              <span class="histogram-info" id="histogramInfo">Chưa có ảnh</span>
+            </div>
+            <div class="panel-scroll" id="panelScroll">
+              <section class="adjustment-section" data-section="light">
+                <div class="section-head">
+                  <button class="section-heading section-toggle" type="button" aria-expanded="true"><div><span class="eyebrow">ÁNH SÁNG</span><h2>Tông sáng<span class="section-dot" aria-hidden="true"></span></h2></div><span class="chevron" aria-hidden="true">⌄</span></button>
+                  <button class="section-bypass" type="button" aria-pressed="false" data-eye aria-label="Tạm tắt nhóm Tông sáng" hidden></button>
+                  <button class="chip-button" id="autoToneButton" type="button" title="Tự động căn sáng dựa trên histogram">Tự động</button>
                 </div>
-              </div>
-              <div class="controls-list" id="colorControls"></div>
-            </section>
-            <section class="adjustment-section" data-section="curve">
-              <div class="section-head">
-                <button class="section-heading section-toggle" type="button" aria-expanded="true"><div><span class="eyebrow">TÔNG MÀU</span><h2>Đường cong tông</h2></div><span class="chevron" aria-hidden="true">⌄</span></button>
-                <button class="chip-button" id="curveResetButton" type="button" disabled>Đặt lại</button>
-              </div>
-              <div class="section-content curve-content">
-                <div class="segmented" role="tablist" aria-label="Kênh đường cong">
-                  <button class="segment active" type="button" role="tab" aria-selected="true" data-curve-channel="master">RGB</button>
-                  <button class="segment" type="button" role="tab" aria-selected="false" data-curve-channel="r">Đỏ</button>
-                  <button class="segment" type="button" role="tab" aria-selected="false" data-curve-channel="g">Lục</button>
-                  <button class="segment" type="button" role="tab" aria-selected="false" data-curve-channel="b">Lam</button>
+                <div class="controls-list" id="lightControls"></div>
+              </section>
+              <section class="adjustment-section" data-section="color">
+                <div class="section-head">
+                  <button class="section-heading section-toggle" type="button" aria-expanded="true"><div><span class="eyebrow">MÀU SẮC</span><h2>Cân bằng màu<span class="section-dot" aria-hidden="true"></span></h2></div><span class="chevron" aria-hidden="true">⌄</span></button>
+                  <button class="section-bypass" type="button" aria-pressed="false" data-eye aria-label="Tạm tắt nhóm Cân bằng màu" hidden></button>
+                  <div class="head-tools">
+                    <button class="chip-button" id="eyedropperButton" type="button" aria-pressed="false" title="Chấm vào vùng xám/trắng trung tính trên ảnh (W)">Chấm trắng</button>
+                    <button class="chip-button" id="autoWhiteBalanceButton" type="button" title="Tự động cân bằng trắng">Tự động</button>
+                  </div>
                 </div>
-                <canvas class="curve-canvas" id="curveCanvas" tabindex="0" aria-label="Đường cong tông: bấm để thêm điểm, kéo để chỉnh, nhấp đúp hoặc kéo ra ngoài để xoá"></canvas>
-                <p class="section-help">Bấm để thêm điểm · kéo ra ngoài hoặc nhấp đúp để xoá · phím mũi tên để chỉnh tinh.</p>
-              </div>
-            </section>
-            <section class="adjustment-section hsl-section" data-section="hsl">
-              <button class="section-heading section-toggle" type="button" aria-expanded="true"><div><span class="eyebrow">BỘ TRỘN MÀU</span><h2>HSL</h2></div><span class="chevron" aria-hidden="true">⌄</span></button>
-              <div class="section-content hsl-content">
-                <div class="hsl-tabs" role="tablist" aria-label="Thuộc tính HSL">
-                  <button class="hsl-tab active" type="button" role="tab" aria-selected="true" data-hsl-tab="hue">Sắc độ</button>
-                  <button class="hsl-tab" type="button" role="tab" aria-selected="false" data-hsl-tab="saturation">Bão hòa</button>
-                  <button class="hsl-tab" type="button" role="tab" aria-selected="false" data-hsl-tab="luminance">Độ sáng</button>
-                  <button class="hsl-tab" type="button" role="tab" aria-selected="false" data-hsl-tab="all">Tất cả</button>
+                <div class="controls-list" id="colorControls"></div>
+              </section>
+              <section class="adjustment-section" data-section="curve">
+                <div class="section-head">
+                  <button class="section-heading section-toggle" type="button" aria-expanded="true"><div><span class="eyebrow">TÔNG MÀU</span><h2>Đường cong tông<span class="section-dot" aria-hidden="true"></span></h2></div><span class="chevron" aria-hidden="true">⌄</span></button>
+                  <button class="section-bypass" type="button" aria-pressed="false" data-eye aria-label="Tạm tắt nhóm Đường cong tông" hidden></button>
+                  <button class="chip-button" id="curveResetButton" type="button" disabled>Đặt lại</button>
                 </div>
-                <div class="hsl-controls" id="hslHueControls" data-hsl-panel="hue" role="tabpanel"></div>
-                <div class="hsl-controls" id="hslSaturationControls" data-hsl-panel="saturation" role="tabpanel" hidden></div>
-                <div class="hsl-controls" id="hslLuminanceControls" data-hsl-panel="luminance" role="tabpanel" hidden></div>
-              </div>
-            </section>
-            <section class="adjustment-section" data-section="grade">
-              <div class="section-head">
-                <button class="section-heading section-toggle" type="button" aria-expanded="true"><div><span class="eyebrow">PHÂN MÀU</span><h2>Color grading</h2></div><span class="chevron" aria-hidden="true">⌄</span></button>
-                <button class="chip-button" id="gradeResetButton" type="button" disabled>Đặt lại</button>
-              </div>
-              <div class="section-content grade-content">
-                <div class="grade-wheels" id="gradeWheels"></div>
-                <div class="controls-list grade-sliders" id="gradeControls"></div>
-              </div>
-            </section>
-            <section class="adjustment-section" data-section="effects">
-              <button class="section-heading section-toggle" type="button" aria-expanded="true"><div><span class="eyebrow">HIỆU ỨNG</span><h2>Hiện diện &amp; hoàn thiện</h2></div><span class="chevron" aria-hidden="true">⌄</span></button>
-              <div class="controls-list" id="effectControls"></div>
-            </section>
-            <section class="adjustment-section" data-section="detail">
-              <button class="section-heading section-toggle" type="button" aria-expanded="false"><div><span class="eyebrow">CHI TIẾT</span><h2>Làm nét &amp; giảm nhiễu</h2></div><span class="chevron" aria-hidden="true">⌄</span></button>
-              <div class="controls-list" id="detailControls"></div>
-            </section>
+                <div class="section-content curve-content">
+                  <div class="segmented" role="tablist" aria-label="Kênh đường cong">
+                    <button class="segment active" type="button" role="tab" aria-selected="true" data-curve-channel="master">RGB</button>
+                    <button class="segment" type="button" role="tab" aria-selected="false" data-curve-channel="r">Đỏ</button>
+                    <button class="segment" type="button" role="tab" aria-selected="false" data-curve-channel="g">Lục</button>
+                    <button class="segment" type="button" role="tab" aria-selected="false" data-curve-channel="b">Lam</button>
+                  </div>
+                  <canvas class="curve-canvas" id="curveCanvas" tabindex="0" aria-label="Đường cong tông: bấm để thêm điểm, kéo để chỉnh, nhấp đúp hoặc kéo ra ngoài để xoá"></canvas>
+                  <p class="section-help">Bấm để thêm điểm · kéo ra ngoài hoặc nhấp đúp để xoá · phím mũi tên để chỉnh tinh.</p>
+                </div>
+              </section>
+              <section class="adjustment-section hsl-section" data-section="hsl">
+                <div class="section-head">
+                  <button class="section-heading section-toggle" type="button" aria-expanded="true"><div><span class="eyebrow">BỘ TRỘN MÀU</span><h2>HSL<span class="section-dot" aria-hidden="true"></span></h2></div><span class="chevron" aria-hidden="true">⌄</span></button>
+                  <button class="section-bypass" type="button" aria-pressed="false" data-eye aria-label="Tạm tắt nhóm HSL" hidden></button>
+                </div>
+                <div class="section-content hsl-content">
+                  <div class="hsl-tabs" role="tablist" aria-label="Thuộc tính HSL">
+                    <button class="hsl-tab active" type="button" role="tab" aria-selected="true" data-hsl-tab="hue">Sắc độ</button>
+                    <button class="hsl-tab" type="button" role="tab" aria-selected="false" data-hsl-tab="saturation">Bão hòa</button>
+                    <button class="hsl-tab" type="button" role="tab" aria-selected="false" data-hsl-tab="luminance">Độ sáng</button>
+                    <button class="hsl-tab" type="button" role="tab" aria-selected="false" data-hsl-tab="all">Tất cả</button>
+                  </div>
+                  <div class="hsl-controls" id="hslHueControls" data-hsl-panel="hue" role="tabpanel"></div>
+                  <div class="hsl-controls" id="hslSaturationControls" data-hsl-panel="saturation" role="tabpanel" hidden></div>
+                  <div class="hsl-controls" id="hslLuminanceControls" data-hsl-panel="luminance" role="tabpanel" hidden></div>
+                </div>
+              </section>
+              <section class="adjustment-section" data-section="grade">
+                <div class="section-head">
+                  <button class="section-heading section-toggle" type="button" aria-expanded="false"><div><span class="eyebrow">PHÂN MÀU</span><h2>Color grading<span class="section-dot" aria-hidden="true"></span></h2></div><span class="chevron" aria-hidden="true">⌄</span></button>
+                  <button class="section-bypass" type="button" aria-pressed="false" data-eye aria-label="Tạm tắt nhóm Phân màu" hidden></button>
+                  <button class="chip-button" id="gradeResetButton" type="button" disabled>Đặt lại</button>
+                </div>
+                <div class="section-content grade-content">
+                  <div class="grade-wheels" id="gradeWheels"></div>
+                  <div class="controls-list grade-sliders" id="gradeControls"></div>
+                </div>
+              </section>
+              <section class="adjustment-section" data-section="effects">
+                <div class="section-head">
+                  <button class="section-heading section-toggle" type="button" aria-expanded="true"><div><span class="eyebrow">HIỆU ỨNG</span><h2>Hiện diện &amp; hoàn thiện<span class="section-dot" aria-hidden="true"></span></h2></div><span class="chevron" aria-hidden="true">⌄</span></button>
+                  <button class="section-bypass" type="button" aria-pressed="false" data-eye aria-label="Tạm tắt nhóm Hiệu ứng" hidden></button>
+                </div>
+                <div class="controls-list" id="effectControls"></div>
+              </section>
+              <section class="adjustment-section" data-section="detail">
+                <div class="section-head">
+                  <button class="section-heading section-toggle" type="button" aria-expanded="false"><div><span class="eyebrow">CHI TIẾT</span><h2>Làm nét &amp; giảm nhiễu<span class="section-dot" aria-hidden="true"></span></h2></div><span class="chevron" aria-hidden="true">⌄</span></button>
+                  <button class="section-bypass" type="button" aria-pressed="false" data-eye aria-label="Tạm tắt nhóm Chi tiết" hidden></button>
+                </div>
+                <div class="controls-list" id="detailControls"></div>
+              </section>
+              <section class="adjustment-section" data-section="lens">
+                <div class="section-head">
+                  <button class="section-heading section-toggle" type="button" aria-expanded="false"><div><span class="eyebrow">ỐNG KÍNH</span><h2>Méo hình &amp; viền màu<span class="section-dot" aria-hidden="true"></span></h2></div><span class="chevron" aria-hidden="true">⌄</span></button>
+                  <button class="section-bypass" type="button" aria-pressed="false" data-eye aria-label="Tạm tắt nhóm Ống kính" hidden></button>
+                </div>
+                <div class="section-content">
+                  <div class="controls-list" id="lensControls"></div>
+                  <p class="section-help lens-help">Méo hình dương sửa ảnh bị phình (góc rộng), âm sửa ảnh bị thắt (tele).</p>
+                </div>
+              </section>
 
-            <section class="mask-section" data-section="masks">
-              <button class="section-heading section-toggle mask-heading" type="button" aria-expanded="true"><div><span class="eyebrow">ĐIỀU CHỈNH CỤC BỘ</span><h2>Vùng chọn</h2></div><span class="chevron" aria-hidden="true">⌄</span></button>
-              <div class="section-content mask-content">
-                <div class="mask-type-grid" role="group" aria-label="Thêm vùng chọn">
-                  <button class="mask-type" type="button" data-add-mask="sky" disabled>+ Bầu trời</button>
-                  <button class="mask-type" type="button" data-add-mask="brush" disabled>+ Cọ vùng</button>
-                  <button class="mask-type" type="button" data-add-mask="linear" disabled>+ Gradient</button>
-                  <button class="mask-type" type="button" data-add-mask="radial" disabled>+ Oval</button>
+              <section class="mask-section" data-section="masks">
+                <div class="section-head">
+                  <button class="section-heading section-toggle mask-heading" type="button" aria-expanded="true"><div><span class="eyebrow">ĐIỀU CHỈNH CỤC BỘ</span><h2>Vùng chọn<span class="section-dot" aria-hidden="true"></span></h2></div><span class="chevron" aria-hidden="true">⌄</span></button>
+                  <button class="section-bypass" type="button" aria-pressed="false" data-eye aria-label="Tạm tắt tất cả vùng chọn" hidden></button>
                 </div>
-                <ul class="mask-list" id="maskList" aria-label="Các vùng chọn"></ul>
-                <p class="mask-help" id="maskHelp">Thêm vùng chọn để chỉnh sáng, màu và chi tiết cục bộ. Tối đa 8 vùng.</p>
-                <div class="mask-editor" id="maskEditor" hidden>
-                  <div class="mask-actions">
-                    <label class="toggle-label"><input id="showMaskToggle" type="checkbox" /> Hiện lớp phủ <kbd>O</kbd></label>
-                    <label class="toggle-label"><input id="invertMaskToggle" type="checkbox" /> Đảo vùng</label>
-                    <button class="text-button" id="clearMaskButton" type="button">Xoá nét cọ</button>
+                <div class="section-content mask-content">
+                  <div class="mask-type-grid" role="group" aria-label="Thêm vùng chọn">
+                    <button class="mask-type" type="button" data-add-mask="sky" disabled>+ Bầu trời</button>
+                    <button class="mask-type" type="button" data-add-mask="brush" disabled>+ Cọ vùng</button>
+                    <button class="mask-type" type="button" data-add-mask="linear" disabled>+ Gradient</button>
+                    <button class="mask-type" type="button" data-add-mask="radial" disabled>+ Oval</button>
+                    <button class="mask-type" type="button" data-add-mask="luma" disabled>+ Dải sáng</button>
+                    <button class="mask-type" type="button" data-add-mask="color" disabled>+ Dải màu</button>
                   </div>
-                  <div class="brush-options" id="brushOptions" hidden>
-                    <div class="mini-control"><label for="brushSizeRange">Cỡ cọ</label><input id="brushSizeRange" type="range" min="4" max="400" value="64" /><output id="brushSizeValue">64</output></div>
-                    <div class="mini-control"><label for="brushFeatherRange">Độ mềm</label><input id="brushFeatherRange" type="range" min="0" max="100" value="50" /><output id="brushFeatherValue">50</output></div>
-                    <div class="mini-control"><label for="brushFlowRange">Lưu lượng</label><input id="brushFlowRange" type="range" min="5" max="100" value="100" /><output id="brushFlowValue">100</output></div>
-                    <label class="toggle-label"><input id="eraseMaskToggle" type="checkbox" /> Tẩy (giữ Alt)</label>
+                  <ul class="mask-list" id="maskList" aria-label="Các vùng chọn"></ul>
+                  <p class="mask-help" id="maskHelp">Thêm vùng chọn để chỉnh sáng, màu và chi tiết cục bộ. Tối đa 8 vùng.</p>
+                  <div class="mask-editor" id="maskEditor" hidden>
+                    <div class="mask-actions">
+                      <label class="toggle-label"><input id="showMaskToggle" type="checkbox" /> Hiện lớp phủ <kbd>O</kbd></label>
+                      <label class="toggle-label"><input id="invertMaskToggle" type="checkbox" /> Đảo vùng</label>
+                      <button class="text-button" id="clearMaskButton" type="button">Xoá nét cọ</button>
+                    </div>
+                    <div class="brush-options" id="brushOptions" hidden>
+                      <div class="mini-control"><label for="brushSizeRange">Cỡ cọ</label><input id="brushSizeRange" type="range" min="4" max="400" value="64" /><output id="brushSizeValue">64</output></div>
+                      <div class="mini-control"><label for="brushFeatherRange">Độ mềm</label><input id="brushFeatherRange" type="range" min="0" max="100" value="50" /><output id="brushFeatherValue">50</output></div>
+                      <div class="mini-control"><label for="brushFlowRange">Lưu lượng</label><input id="brushFlowRange" type="range" min="5" max="100" value="100" /><output id="brushFlowValue">100</output></div>
+                      <label class="toggle-label"><input id="eraseMaskToggle" type="checkbox" /> Tẩy (giữ Alt)</label>
+                    </div>
+                    <div class="brush-options" id="radialOptions" hidden>
+                      <div class="mini-control"><label for="maskFeatherRange">Độ mềm</label><input id="maskFeatherRange" type="range" min="0" max="100" value="50" /><output id="maskFeatherValue">50</output></div>
+                      <div class="mini-control"><label for="maskRotationRange">Xoay</label><input id="maskRotationRange" type="range" min="-180" max="180" value="0" /><output id="maskRotationValue">0°</output></div>
+                    </div>
+                    <div class="range-refine">
+                      <div class="range-head">
+                        <label class="crop-field" id="rangeTypeField"><span>Giới hạn theo</span>
+                          <select id="rangeTypeSelect">
+                            <option value="none">Không</option>
+                            <option value="luma">Dải sáng</option>
+                            <option value="color">Dải màu</option>
+                          </select>
+                        </label>
+                        <label class="toggle-label" id="rangeInvertLabel"><input id="rangeInvertToggle" type="checkbox" /> Trừ dải này</label>
+                      </div>
+                      <div class="range-color" id="rangeColorControls" hidden>
+                        <span class="range-swatch" id="rangeSwatch"></span>
+                        <button class="chip-button" id="rangePickButton" data-range-pick type="button" title="Bấm rồi chọn màu trên ảnh">Chọn màu</button>
+                      </div>
+                      <div id="rangeLumaControls" hidden></div>
+                      <div class="controls-list range-controls" id="rangeControls"></div>
+                    </div>
+                    <div class="controls-list mask-controls" id="maskControls"></div>
                   </div>
-                  <div class="brush-options" id="radialOptions" hidden>
-                    <div class="mini-control"><label for="maskFeatherRange">Độ mềm</label><input id="maskFeatherRange" type="range" min="0" max="100" value="50" /><output id="maskFeatherValue">50</output></div>
-                    <div class="mini-control"><label for="maskRotationRange">Xoay</label><input id="maskRotationRange" type="range" min="-180" max="180" value="0" /><output id="maskRotationValue">0°</output></div>
-                  </div>
-                  <div class="controls-list mask-controls" id="maskControls"></div>
                 </div>
-              </div>
-            </section>
+              </section>
+
+              <section class="adjustment-section history-section" data-section="history">
+                <div class="section-head">
+                  <button class="section-heading section-toggle" type="button" aria-expanded="false"><div><span class="eyebrow">LỊCH SỬ</span><h2>Lịch sử &amp; snapshot</h2></div><span class="chevron" aria-hidden="true">⌄</span></button>
+                  <button class="chip-button" id="snapshotButton" type="button" disabled title="Lưu trạng thái hiện tại thành mốc có tên">+ Snapshot</button>
+                </div>
+                <div class="section-content history-content">
+                  <h3 class="subhead">Snapshot</h3>
+                  <ul class="snapshot-list" id="snapshotList"></ul>
+                  <p class="section-help" id="snapshotEmpty">Chưa có snapshot. Tạo snapshot để lưu các phiên bản chỉnh và quay lại bất cứ lúc nào.</p>
+                  <h3 class="subhead">Các bước</h3>
+                  <ul class="history-list" id="historyList" aria-label="Các bước chỉnh sửa"></ul>
+                  <p class="section-help" id="historyEmpty">Chưa có ảnh.</p>
+                </div>
+              </section>
+            </div>
           </div>
         </aside>
       </main>
@@ -272,10 +394,22 @@
     <dialog class="app-dialog export-dialog" id="exportDialog" aria-labelledby="exportTitle">
       <form method="dialog" id="exportForm">
         <div class="dialog-header"><div><span class="eyebrow">XUẤT FILE</span><h2 id="exportTitle">Xuất ảnh</h2></div><button class="dialog-close" value="cancel" aria-label="Đóng" type="submit">×</button></div>
+        <div class="export-preset-row">
+          <label class="field-label" for="exportPresetSelect">Preset xuất</label>
+          <div class="inline-row">
+            <select id="exportPresetSelect"></select>
+            <button class="button button-ghost" id="saveExportPresetButton" type="button" title="Lưu các tuỳ chọn hiện tại thành preset xuất">Lưu</button>
+            <button class="button button-ghost" id="deleteExportPresetButton" type="button" title="Xoá preset xuất" aria-label="Xoá preset xuất">×</button>
+          </div>
+        </div>
         <div class="field-grid">
           <div>
             <label class="field-label" for="exportScopeSelect">Phạm vi</label>
-            <select id="exportScopeSelect"><option value="selected">Các ảnh đã chọn</option><option value="active">Chỉ ảnh đang xem</option></select>
+            <select id="exportScopeSelect">
+              <option value="selected">Các ảnh đã chọn (✓)</option>
+              <option value="active">Chỉ ảnh đang xem</option>
+              <option value="visible">Ảnh đang hiện theo bộ lọc</option>
+            </select>
           </div>
           <div>
             <label class="field-label" for="formatSelect">Định dạng</label>
@@ -299,8 +433,33 @@
             <input class="text-input" id="longEdgeInput" type="number" min="64" max="30000" step="1" value="2048" />
           </div>
         </div>
-        <label class="field-label" for="deliverySelect">Lưu file</label>
-        <select id="deliverySelect"></select>
+        <div class="field-grid">
+          <div>
+            <label class="field-label" for="sharpenSelect">Làm nét khi xuất</label>
+            <select id="sharpenSelect">
+              <option value="none">Không</option>
+              <option value="low">Màn hình · nhẹ</option>
+              <option value="standard">Màn hình · chuẩn</option>
+              <option value="high">Màn hình · mạnh</option>
+            </select>
+          </div>
+          <div>
+            <label class="field-label" for="deliverySelect">Lưu file</label>
+            <select id="deliverySelect"></select>
+          </div>
+        </div>
+        <label class="field-label" for="templateInput">Tên file</label>
+        <input class="text-input" id="templateInput" type="text" value="{name}-luma" autocomplete="off" spellcheck="false" />
+        <div class="token-row" aria-label="Chèn biến vào tên file">
+          <button type="button" class="token" data-token="{name}" title="Tên ảnh gốc">{name}</button>
+          <button type="button" class="token" data-token="{date}" title="Ngày xuất">{date}</button>
+          <button type="button" class="token" data-token="{time}" title="Giờ xuất">{time}</button>
+          <button type="button" class="token" data-token="{n}" title="Số thứ tự 001, 002…">{n}</button>
+          <button type="button" class="token" data-token="{w}x{h}" title="Kích thước xuất">{w}x{h}</button>
+          <button type="button" class="token" data-token="{rating}" title="Số sao">{rating}</button>
+          <button type="button" class="token" data-token="{preset}" title="Tên preset đang dùng">{preset}</button>
+        </div>
+        <p class="template-preview" id="templatePreview"></p>
         <div class="checkbox-stack" id="metadataField">
           <label class="toggle-label"><input id="keepExifToggle" type="checkbox" checked /> Giữ thông tin máy ảnh (EXIF) khi xuất JPEG</label>
           <label class="toggle-label"><input id="keepGpsToggle" type="checkbox" /> Giữ cả vị trí GPS</label>
@@ -333,11 +492,11 @@
 
     <dialog class="app-dialog" id="nameDialog" aria-labelledby="nameDialogTitle">
       <form method="dialog" id="nameForm">
-        <div class="dialog-header"><div><span class="eyebrow">PRESET</span><h2 id="nameDialogTitle">Lưu preset</h2></div><button class="dialog-close" value="cancel" aria-label="Đóng" type="submit">×</button></div>
-        <label class="field-label" for="nameInput">Tên preset</label>
+        <div class="dialog-header"><div><span class="eyebrow">ĐẶT TÊN</span><h2 id="nameDialogTitle">Lưu preset</h2></div><button class="dialog-close" value="cancel" aria-label="Đóng" type="submit">×</button></div>
+        <label class="field-label" for="nameInput" id="nameLabel">Tên preset</label>
         <input class="text-input" id="nameInput" type="text" maxlength="60" autocomplete="off" required />
         <div class="dialog-actions">
-          <button class="button button-ghost" value="cancel" type="submit">Huỷ</button>
+          <button class="button button-ghost" value="cancel" type="submit" formnovalidate>Huỷ</button>
           <button class="button button-primary" value="default" type="submit">Lưu</button>
         </div>
       </form>
@@ -349,28 +508,34 @@
         <dl class="shortcut-list">
           <dt><kbd>Ctrl</kbd> <kbd>Z</kbd></dt><dd>Hoàn tác</dd>
           <dt><kbd>Ctrl</kbd> <kbd>Shift</kbd> <kbd>Z</kbd> / <kbd>Ctrl</kbd> <kbd>Y</kbd></dt><dd>Làm lại</dd>
+          <dt><kbd>T</kbd> / <kbd>Shift</kbd> <kbd>T</kbd></dt><dd>Mở/đóng bảng điều chỉnh / bảng preset</dd>
           <dt><kbd>\</kbd> (giữ)</dt><dd>Xem nhanh ảnh gốc</dd>
           <dt><kbd>Y</kbd></dt><dd>Bật/tắt so sánh tách đôi</dd>
-          <dt><kbd>R</kbd></dt><dd>Cắt &amp; xoay · <kbd>Enter</kbd> xong · <kbd>Esc</kbd> huỷ</dd>
+          <dt><kbd>R</kbd></dt><dd>Cắt &amp; xoay · <kbd>X</kbd> đổi dọc/ngang · <kbd>O</kbd> đổi lưới · <kbd>Enter</kbd> xong · <kbd>Esc</kbd> huỷ</dd>
           <dt><kbd>Shift</kbd> <kbd>R</kbd></dt><dd>Đặt lại ảnh đang xem</dd>
           <dt><kbd>J</kbd></dt><dd>Cảnh báo cháy sáng / mất chi tiết tối</dd>
           <dt><kbd>W</kbd></dt><dd>Chấm cân bằng trắng</dd>
           <dt><kbd>O</kbd></dt><dd>Hiện lớp phủ vùng chọn</dd>
+          <dt><kbd>Esc</kbd> / <kbd>Delete</kbd></dt><dd>Thoát chỉnh vùng chọn / xoá vùng chọn đang chọn</dd>
+          <dt><kbd>0</kbd>–<kbd>5</kbd></dt><dd>Gắn sao cho ảnh đang xem</dd>
+          <dt><kbd>P</kbd> / <kbd>X</kbd> / <kbd>U</kbd></dt><dd>Cờ chọn / loại / bỏ cờ</dd>
           <dt><kbd>Z</kbd></dt><dd>Chuyển Vừa khung ↔ 1:1</dd>
           <dt><kbd>+</kbd> / <kbd>-</kbd> · cuộn chuột</dt><dd>Phóng to / thu nhỏ</dd>
           <dt><kbd>Space</kbd> + kéo</dt><dd>Di chuyển ảnh khi đang phóng to</dd>
-          <dt><kbd>←</kbd> <kbd>→</kbd></dt><dd>Ảnh trước / sau trong filmstrip</dd>
+          <dt><kbd>←</kbd> <kbd>→</kbd></dt><dd>Ảnh trước / sau (theo bộ lọc)</dd>
+          <dt>Ctrl / Shift + bấm ảnh</dt><dd>Chọn thêm / chọn một dãy trong filmstrip</dd>
           <dt><kbd>Ctrl</kbd> <kbd>Shift</kbd> <kbd>C</kbd> / <kbd>V</kbd></dt><dd>Sao chép / dán thiết lập</dd>
           <dt><kbd>Ctrl</kbd> <kbd>Shift</kbd> <kbd>S</kbd></dt><dd>Đồng bộ sang ảnh đã chọn</dd>
+          <dt><kbd>Ctrl</kbd> <kbd>'</kbd></dt><dd>Tạo bản sao ảo</dd>
           <dt><kbd>Ctrl</kbd> <kbd>Shift</kbd> <kbd>E</kbd></dt><dd>Xuất ảnh</dd>
           <dt><kbd>F</kbd></dt><dd>Toàn màn hình</dd>
           <dt>Thanh trượt</dt><dd>Nhấp đúp nhãn/thanh để đặt lại · <kbd>Shift</kbd> + kéo để chỉnh tinh · <kbd>Shift</kbd> + mũi tên bước ×10 · cuộn chuột khi đang chọn</dd>
+          <dt>Tiêu đề nhóm</dt><dd><kbd>Alt</kbd> + bấm: chỉ mở nhóm đó · nút con mắt: tạm tắt nhóm để so sánh</dd>
           <dt>Cọ vùng</dt><dd>Giữ <kbd>Alt</kbd> để tẩy · <kbd>[</kbd> <kbd>]</kbd> đổi cỡ cọ</dd>
         </dl>
       </form>
     </dialog>
 
-    <div class="toast" id="toast" role="status" aria-live="polite"><span id="toastMessage"></span><button class="toast-action" id="toastAction" type="button" hidden></button></div>
     <script type="module" src="./app.js"></script>
   </body>
 </html>

@@ -33,6 +33,10 @@ export const controlGroups = {
     { id: "noise", label: "Giảm nhiễu sáng", min: 0, max: 100, step: 1 },
     { id: "colorNoise", label: "Giảm nhiễu màu", min: 0, max: 100, step: 1 },
   ],
+  lens: [
+    { id: "distortion", label: "Méo hình", min: -100, max: 100, step: 1 },
+    { id: "defringe", label: "Khử viền tím/lục", min: 0, max: 100, step: 1 },
+  ],
 };
 
 export const hslColors = [
@@ -93,7 +97,38 @@ export const maskTypes = {
   brush: { label: "Cọ vùng", short: "Cọ" },
   linear: { label: "Gradient", short: "Gradient" },
   radial: { label: "Oval", short: "Oval" },
+  luma: { label: "Dải sáng", short: "Dải sáng" },
+  color: { label: "Dải màu", short: "Dải màu" },
 };
+
+// Các nhóm trong bảng điều chỉnh: dùng cho dấu "đã chỉnh" và nút tạm tắt nhóm.
+export const panelSections = [
+  { id: "light", label: "Tông sáng", keys: ["exposure", "contrast", "highlights", "shadows", "whites", "blacks"] },
+  { id: "color", label: "Cân bằng màu", keys: ["temperature", "tint", "vibrance", "saturation"] },
+  { id: "curve", label: "Đường cong tông" },
+  { id: "hsl", label: "HSL" },
+  { id: "grade", label: "Phân màu" },
+  { id: "effects", label: "Hiện diện & hoàn thiện", keys: ["texture", "clarity", "dehaze", "vignette", "grain", "grainSize"] },
+  { id: "detail", label: "Chi tiết", keys: ["sharpen", "noise", "colorNoise"] },
+  { id: "lens", label: "Ống kính", keys: ["distortion", "defringe"] },
+  { id: "masks", label: "Vùng chọn" },
+];
+
+export const cropGrids = [
+  { id: "thirds", label: "Một phần ba" },
+  { id: "grid", label: "Lưới" },
+  { id: "golden", label: "Tỉ lệ vàng" },
+  { id: "diagonal", label: "Đường chéo" },
+  { id: "none", label: "Không lưới" },
+];
+
+export const builtInExportPresets = [
+  { id: "full-jpeg", name: "Đầy đủ · JPEG 95%", builtin: true, options: { format: "image/jpeg", quality: 95, resize: "original", longEdge: 2048, sharpen: "none", template: "{name}-luma", keepExif: true, keepGps: false } },
+  { id: "social", name: "Mạng xã hội · 2048px", builtin: true, options: { format: "image/jpeg", quality: 85, resize: "long", longEdge: 2048, sharpen: "standard", template: "{name}-web", keepExif: false, keepGps: false } },
+  { id: "print-png", name: "In ấn · PNG đầy đủ", builtin: true, options: { format: "image/png", quality: 100, resize: "original", longEdge: 4096, sharpen: "low", template: "{name}-print", keepExif: true, keepGps: false } },
+];
+
+export const outputSharpenAmounts = { none: 0, low: 0.35, standard: 0.65, high: 1 };
 
 export const aspectRatios = [
   { id: "free", label: "Tự do", value: null },
@@ -114,6 +149,7 @@ export const settingGroups = [
   { id: "hsl", label: "Bộ trộn HSL", keys: Object.values(hslGroups).flat().map((c) => c.id) },
   { id: "effects", label: "Hiệu ứng", keys: controlGroups.effects.map((c) => c.id) },
   { id: "detail", label: "Chi tiết", keys: controlGroups.detail.map((c) => c.id) },
+  { id: "lens", label: "Ống kính", keys: controlGroups.lens.map((c) => c.id) },
   { id: "curve", label: "Đường cong tông" },
   { id: "grade", label: "Phân màu" },
   { id: "masks", label: "Vùng chọn (trừ cọ)" },

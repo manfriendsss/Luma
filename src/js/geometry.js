@@ -45,13 +45,44 @@ export function invert2(m) {
   return [m[3] / det, -m[1] / det, -m[2] / det, m[0] / det];
 }
 
-export function outputToSource(crop, u, v) {
-  const [dx, dy] = apply(cropMatrix(crop), u - 0.5, v - 0.5);
-  return { x: crop.cx + dx, y: crop.cy + dy };
+/**
+ * Sửa méo ống kính (thủ công). distortion ∈ [-100, 100]: dương sửa méo phình (barrel), âm sửa méo gối (pincushion).
+ * Ánh xạ: p_nguồn = tâm + d · s · (1 + k·r²), r chuẩn hoá theo nửa đường chéo ảnh; s co lại để góc ảnh không bị lộ viền.
+ */
+export function lensParams(distortion, imageWidth, imageHeight) {
+  const k = (distortion || 0) / 100 * 0.3;
+  if (!k) return null;
+  return { k, s: k > 0 ? 1 / (1 + k) : 1, cx: imageWidth / 2, cy: imageHeight / 2, R: Math.hypot(imageWidth, imageHeight) / 2 };
 }
 
-export function sourceToOutput(crop, x, y) {
-  const [u, v] = apply(invert2(cropMatrix(crop)), x - crop.cx, y - crop.cy);
+function applyLens(lens, x, y) {
+  if (!lens) return { x, y };
+  const dx = x - lens.cx, dy = y - lens.cy;
+  const r2 = (dx * dx + dy * dy) / (lens.R * lens.R);
+  const f = lens.s * (1 + lens.k * r2);
+  return { x: lens.cx + dx * f, y: lens.cy + dy * f };
+}
+
+function invertLens(lens, x, y) {
+  if (!lens) return { x, y };
+  // Lặp điểm bất động: tìm p sao cho applyLens(p) = (x, y)
+  let px = x, py = y;
+  for (let i = 0; i < 12; i++) {
+    const q = applyLens(lens, px, py);
+    px += x - q.x;
+    py += y - q.y;
+  }
+  return { x: px, y: py };
+}
+
+export function outputToSource(crop, u, v, lens = null) {
+  const [dx, dy] = apply(cropMatrix(crop), u - 0.5, v - 0.5);
+  return applyLens(lens, crop.cx + dx, crop.cy + dy);
+}
+
+export function sourceToOutput(crop, x, y, lens = null) {
+  const p = invertLens(lens, x, y);
+  const [u, v] = apply(invert2(cropMatrix(crop)), p.x - crop.cx, p.y - crop.cy);
   return { u: u + 0.5, v: v + 0.5 };
 }
 

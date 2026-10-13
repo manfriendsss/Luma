@@ -51,13 +51,28 @@ export function saveRecords(records, meta) {
   });
 }
 
-export function deletePhotos(ids) {
+export function deletePhotos(ids, { keepFile = false } = {}) {
   return run([FILES, RECORDS], "readwrite", (t) => {
-    for (const id of ids) { t.objectStore(FILES).delete(id); t.objectStore(RECORDS).delete(id); }
+    for (const id of ids) { if (!keepFile) t.objectStore(FILES).delete(id); t.objectStore(RECORDS).delete(id); }
   });
 }
 
+/** Lưu handle thư mục (không chép ảnh) để mở lại ở phiên sau. */
+export function saveFolder(key, handle) {
+  return run([META], "readwrite", (t) => { t.objectStore(META).put(handle, `folder:${key}`); });
+}
+
+/** Dung lượng trình duyệt đang dùng / cho phép (nếu hỗ trợ). */
+export async function storageEstimate() {
+  try { return await navigator.storage?.estimate?.(); } catch { return null; }
+}
+
+export async function requestPersistence() {
+  try { return await navigator.storage?.persist?.(); } catch { return false; }
+}
+
 export function clearSession() {
+  // Xoá toàn bộ ảnh, bản ghi và handle thư mục của phiên trước
   return run([FILES, RECORDS, META], "readwrite", (t) => {
     for (const name of [FILES, RECORDS, META]) t.objectStore(name).clear();
   });
@@ -79,14 +94,19 @@ export async function loadSession() {
   const r = await run([FILES, RECORDS, META], "readonly", (t, results) => {
     collect(t.objectStore(META).get("session"), results, "meta");
     collect(t.objectStore(RECORDS).getAll(), results, "records");
-    collect(t.objectStore(FILES).getAllKeys(), results, "fileKeys");
+    collect(t.objectStore(META).getAllKeys(), results, "metaKeys");
   });
   if (!r.meta || !r.records?.length) return null;
   const byId = new Map(r.records.map((rec) => [rec.id, rec]));
   const order = (r.meta.order || []).filter((id) => byId.has(id));
-  const records = (order.length ? order.map((id) => byId.get(id)) : r.records);
-  const files = await run([FILES], "readonly", (t, results) => {
-    for (const rec of records) collect(t.objectStore(FILES).get(rec.id), results, rec.id);
+  const records = order.length ? order.map((id) => byId.get(id)) : r.records;
+  const folderKeys = (r.metaKeys || []).filter((k) => typeof k === "string" && k.startsWith("folder:"));
+  const extra = await run([FILES, META], "readonly", (t, results) => {
+    for (const rec of records) if (rec.source?.kind !== "folder" && !rec.fileRef) collect(t.objectStore(FILES).get(rec.id), results, `file:${rec.id}`);
+    for (const k of folderKeys) collect(t.objectStore(META).get(k), results, k);
   });
-  return { meta: r.meta, records: records.filter((rec) => files[rec.id]).map((rec) => ({ ...rec, file: files[rec.id] })) };
+  const files = new Map();
+  for (const rec of records) if (extra[`file:${rec.id}`]) files.set(rec.id, extra[`file:${rec.id}`]);
+  const folders = new Map(folderKeys.map((k) => [k.slice("folder:".length), extra[k]]).filter(([, h]) => h));
+  return { meta: r.meta, records, files, folders };
 }
