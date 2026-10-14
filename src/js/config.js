@@ -37,6 +37,39 @@ export const controlGroups = {
     { id: "distortion", label: "Méo hình", min: -100, max: 100, step: 1 },
     { id: "defringe", label: "Khử viền tím/lục", min: 0, max: 100, step: 1 },
   ],
+  // Sửa phối cảnh (Transform) – áp dụng trước khi cắt, sau khi sửa méo ống kính.
+  transform: [
+    { id: "perspVertical", label: "Dọc", min: -100, max: 100, step: 1 },
+    { id: "perspHorizontal", label: "Ngang", min: -100, max: 100, step: 1 },
+    { id: "perspRotate", label: "Xoay", min: -10, max: 10, step: 0.1, decimals: 1 },
+    { id: "perspAspect", label: "Tỉ lệ khung", min: -100, max: 100, step: 1 },
+    { id: "perspScale", label: "Thu phóng", min: 50, max: 150, step: 1, initial: 100 },
+    { id: "perspX", label: "Dịch ngang", min: -100, max: 100, step: 0.5, decimals: 1 },
+    { id: "perspY", label: "Dịch dọc", min: -100, max: 100, step: 0.5, decimals: 1 },
+  ],
+  // Đường cong tham số kiểu Lightroom (áp dụng trước đường cong điểm).
+  curveParam: [
+    { id: "paramHighlights", label: "Vùng sáng", min: -100, max: 100, step: 1 },
+    { id: "paramLights", label: "Vùng sáng vừa", min: -100, max: 100, step: 1 },
+    { id: "paramDarks", label: "Vùng tối vừa", min: -100, max: 100, step: 1 },
+    { id: "paramShadows", label: "Vùng tối", min: -100, max: 100, step: 1 },
+    { id: "paramSplit1", label: "Ranh giới tối", min: 5, max: 45, step: 1, initial: 25 },
+    { id: "paramSplit2", label: "Ranh giới giữa", min: 30, max: 70, step: 1, initial: 50 },
+    { id: "paramSplit3", label: "Ranh giới sáng", min: 55, max: 95, step: 1, initial: 75 },
+  ],
+  // Hiệu chỉnh màu gốc (Calibration): dịch sắc độ / bão hoà của ba màu cơ bản.
+  calibration: [
+    { id: "calShadowTint", label: "Sắc thái vùng tối", min: -100, max: 100, step: 1, gradient: "linear-gradient(90deg,#28a461,#d8d8dc 50%,#d84bb4)" },
+    { id: "calRedHue", label: "Đỏ · sắc độ", min: -100, max: 100, step: 1, gradient: "linear-gradient(90deg,#e8407a,#f04455 50%,#f28b32)" },
+    { id: "calRedSat", label: "Đỏ · bão hoà", min: -100, max: 100, step: 1, gradient: "linear-gradient(90deg,#8a7f80,#f04455)" },
+    { id: "calGreenHue", label: "Lục · sắc độ", min: -100, max: 100, step: 1, gradient: "linear-gradient(90deg,#b9c93a,#55bd63 50%,#25c9ba)" },
+    { id: "calGreenSat", label: "Lục · bão hoà", min: -100, max: 100, step: 1, gradient: "linear-gradient(90deg,#7d887f,#55bd63)" },
+    { id: "calBlueHue", label: "Lam · sắc độ", min: -100, max: 100, step: 1, gradient: "linear-gradient(90deg,#28b5d9,#337de8 50%,#8a58df)" },
+    { id: "calBlueSat", label: "Lam · bão hoà", min: -100, max: 100, step: 1, gradient: "linear-gradient(90deg,#7c8290,#337de8)" },
+  ],
+  lut: [
+    { id: "lutAmount", label: "Cường độ LUT", min: 0, max: 100, step: 1, initial: 100 },
+  ],
 };
 
 export const hslColors = [
@@ -105,12 +138,15 @@ export const maskTypes = {
 export const panelSections = [
   { id: "light", label: "Tông sáng", keys: ["exposure", "contrast", "highlights", "shadows", "whites", "blacks"] },
   { id: "color", label: "Cân bằng màu", keys: ["temperature", "tint", "vibrance", "saturation"] },
-  { id: "curve", label: "Đường cong tông" },
+  { id: "curve", label: "Đường cong tông", keys: controlGroups.curveParam.map((c) => c.id), custom: true },
   { id: "hsl", label: "HSL" },
   { id: "grade", label: "Phân màu" },
   { id: "effects", label: "Hiện diện & hoàn thiện", keys: ["texture", "clarity", "dehaze", "vignette", "grain", "grainSize"] },
   { id: "detail", label: "Chi tiết", keys: ["sharpen", "noise", "colorNoise"] },
   { id: "lens", label: "Ống kính", keys: ["distortion", "defringe"] },
+  { id: "transform", label: "Phối cảnh", keys: controlGroups.transform.map((c) => c.id) },
+  { id: "calibration", label: "Hiệu chỉnh màu gốc", keys: controlGroups.calibration.map((c) => c.id) },
+  { id: "lut", label: "LUT", keys: ["lutAmount"], custom: true },
   { id: "masks", label: "Vùng chọn" },
 ];
 
@@ -124,8 +160,16 @@ export const cropGrids = [
 
 export const builtInExportPresets = [
   { id: "full-jpeg", name: "Đầy đủ · JPEG 95%", builtin: true, options: { format: "image/jpeg", quality: 95, resize: "original", longEdge: 2048, sharpen: "none", template: "{name}-luma", keepExif: true, keepGps: false } },
+  { id: "web-avif", name: "Web · AVIF 2560px", builtin: true, requires: "image/avif", options: { format: "image/avif", quality: 80, resize: "long", longEdge: 2560, sharpen: "standard", template: "{name}-web", keepExif: false, keepGps: false } },
   { id: "social", name: "Mạng xã hội · 2048px", builtin: true, options: { format: "image/jpeg", quality: 85, resize: "long", longEdge: 2048, sharpen: "standard", template: "{name}-web", keepExif: false, keepGps: false } },
   { id: "print-png", name: "In ấn · PNG đầy đủ", builtin: true, options: { format: "image/png", quality: 100, resize: "original", longEdge: 4096, sharpen: "low", template: "{name}-print", keepExif: true, keepGps: false } },
+];
+
+export const defaultWatermark = { enabled: false, text: "© LUMA", useLogo: false, position: "br", size: 4, opacity: 70, margin: 3, color: "#ffffff" };
+export const watermarkPositions = [
+  ["tl", "Trên trái"], ["t", "Trên giữa"], ["tr", "Trên phải"],
+  ["l", "Giữa trái"], ["c", "Chính giữa"], ["r", "Giữa phải"],
+  ["bl", "Dưới trái"], ["b", "Dưới giữa"], ["br", "Dưới phải"],
 ];
 
 export const outputSharpenAmounts = { none: 0, low: 0.35, standard: 0.65, high: 1 };
@@ -150,7 +194,10 @@ export const settingGroups = [
   { id: "effects", label: "Hiệu ứng", keys: controlGroups.effects.map((c) => c.id) },
   { id: "detail", label: "Chi tiết", keys: controlGroups.detail.map((c) => c.id) },
   { id: "lens", label: "Ống kính", keys: controlGroups.lens.map((c) => c.id) },
-  { id: "curve", label: "Đường cong tông" },
+  { id: "transform", label: "Phối cảnh", keys: controlGroups.transform.map((c) => c.id) },
+  { id: "calibration", label: "Hiệu chỉnh màu gốc", keys: controlGroups.calibration.map((c) => c.id) },
+  { id: "lut", label: "LUT", keys: ["lutAmount"] },
+  { id: "curve", label: "Đường cong tông", keys: controlGroups.curveParam.map((c) => c.id) },
   { id: "grade", label: "Phân màu" },
   { id: "masks", label: "Vùng chọn (trừ cọ)" },
   { id: "crop", label: "Cắt & xoay" },

@@ -4,6 +4,7 @@ import { defaultSettings, settingsEqual } from "./settings.js";
 import { activatePhoto, removePhoto } from "./photos.js";
 import { updateActionButtons } from "./panel.js";
 import { updateExportCount } from "./export.js";
+import { renderGrid, refreshPreviews } from "./gridview.js";
 
 export function isEdited(photo) {
   return !settingsEqual({ ...photo.settings, preset: null }, { ...defaultSettings(photo.width, photo.height), preset: null });
@@ -75,7 +76,8 @@ export function renderFilmstrip() {
     open.setAttribute("aria-label", `Mở ảnh ${index + 1}: ${photo.name}`);
     if (photo.id === state.activeId) open.setAttribute("aria-current", "true");
     const img = document.createElement("img");
-    img.src = photo.thumbUrl;
+    img.src = photo.previewUrl || photo.thumbUrl;
+    img.dataset.thumb = "";
     img.alt = "";
     img.loading = "lazy";
     img.decoding = "async";
@@ -136,6 +138,7 @@ export function renderFilmstrip() {
   el.filmstripSection.hidden = total === 0;
   el.filmstripEmpty.hidden = visible.length > 0 || total === 0;
   updateActionButtons();
+  renderGrid();
 }
 
 export function updateFilmstripBadges() {
@@ -143,6 +146,7 @@ export function updateFilmstripBadges() {
     const badge = document.querySelector(`.thumb-card[data-id="${CSS.escape(photo.id)}"] .thumb-edited`);
     if (badge) badge.hidden = !isEdited(photo);
   }
+  refreshPreviews();
 }
 
 export function navigatePhoto(direction) {

@@ -45,9 +45,39 @@ export function makeCurveEvaluator(rawPoints) {
 
 const clamp01 = (v) => Math.min(1, Math.max(0, v));
 
-/** LUT RGBA float: kênh R/G/B = đường cong kênh ∘ đường cong tổng. */
-export function buildCurveLut(curve) {
-  const master = makeCurveEvaluator(curve.master);
+/**
+ * Hàm đường cong tham số (Shadows/Darks/Lights/Highlights + 3 ranh giới), null nếu không chỉnh.
+ * Mỗi vùng là một "bướu" mượt quanh tâm vùng; biên độ tối đa ≈ ±0.2.
+ */
+export function makeParametric({ shadows = 0, darks = 0, lights = 0, highlights = 0, s1 = 25, s2 = 50, s3 = 75 } = {}) {
+  if (!shadows && !darks && !lights && !highlights) return null;
+  const p1 = s1 / 100, p2 = Math.max(p1 + 0.02, s2 / 100), p3 = Math.max(p2 + 0.02, s3 / 100);
+  const regions = [[shadows, 0, p1], [darks, p1, p2], [lights, p2, p3], [highlights, p3, 1]];
+  return (x) => {
+    let y = x;
+    for (const [amount, a, b] of regions) {
+      if (!amount) continue;
+      const c = (a + b) / 2;
+      const w = Math.max(0.1, b - a);
+      const bump = Math.max(0, 1 - ((x - c) / w) ** 2);
+      // Giữ hai đầu 0 và 1 cố định để không làm bệt màu đen/trắng
+      y += (amount / 100) * 0.2 * bump * bump * Math.min(1, x * 12, (1 - x) * 12);
+    }
+    return clamp01(y);
+  };
+}
+
+/** Lấy tham số đường cong từ values (paramShadows…). */
+export const parametricFromValues = (v = {}) => ({
+  shadows: v.paramShadows || 0, darks: v.paramDarks || 0, lights: v.paramLights || 0, highlights: v.paramHighlights || 0,
+  s1: v.paramSplit1 ?? 25, s2: v.paramSplit2 ?? 50, s3: v.paramSplit3 ?? 75,
+});
+
+/** LUT RGBA float: kênh R/G/B = đường cong kênh ∘ đường cong tổng ∘ đường cong tham số. */
+export function buildCurveLut(curve, param = null) {
+  const point = makeCurveEvaluator(curve.master);
+  const parametric = param ? makeParametric(param) : null;
+  const master = parametric ? (x) => point(parametric(x)) : point;
   const channels = [makeCurveEvaluator(curve.r), makeCurveEvaluator(curve.g), makeCurveEvaluator(curve.b)];
   const lut = new Float32Array(LUT_SIZE * 4);
   for (let i = 0; i < LUT_SIZE; i++) {
@@ -76,28 +106,9 @@ export function blendCurvePoints(basePoints, targetPoints, amount, samples = 9) 
 }
 
 /** Đường cong tham số kiểu Lightroom (Shadows/Darks/Lights/Highlights) → các điểm. */
-export function parametricToPoints({ shadows = 0, darks = 0, lights = 0, highlights = 0, s1 = 25, s2 = 50, s3 = 75 }) {
-  if (!shadows && !darks && !lights && !highlights) return null;
-  const p1 = s1 / 100;
-  const p2 = s2 / 100;
-  const p3 = s3 / 100;
-  const regions = [
-    [shadows, 0, p1],
-    [darks, p1, p2],
-    [lights, p2, p3],
-    [highlights, p3, 1],
-  ];
-  const f = (x) => {
-    let y = x;
-    for (const [amount, a, b] of regions) {
-      if (!amount) continue;
-      const c = (a + b) / 2;
-      const w = Math.max(0.08, (b - a));
-      const bump = Math.max(0, 1 - ((x - c) / w) ** 2);
-      y += (amount / 100) * 0.16 * bump * bump;
-    }
-    return clamp01(y);
-  };
+export function parametricToPoints(param) {
+  const f = makeParametric(param);
+  if (!f) return null;
   const out = [];
   for (let i = 0; i <= 8; i++) {
     const x = i / 8;

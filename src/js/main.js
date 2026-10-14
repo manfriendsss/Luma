@@ -5,7 +5,7 @@ import { drawHistogram } from "./widgets.js";
 import { fitCropInside, rotateQuarter, aspectValue, applyAspect } from "./geometry.js";
 import { defaultCrop } from "./settings.js";
 import {
-  state, el, clamp, activePhoto, activeMask, editingText, focusOwnsKeys, showToast, undo, redo, scheduleRender,
+  state, el, hooks, clamp, activePhoto, activeMask, editingText, focusOwnsKeys, showToast, undo, redo, scheduleRender,
 } from "./core.js";
 import { initSession, flushAutosave } from "./session.js";
 import {
@@ -21,6 +21,10 @@ import { initPresets, setPresetDrawer, importPresetFiles } from "./presets-ui.js
 import { initExport, openExportDialog } from "./export.js";
 import { initDialogs, openSettingsDialog, pasteSettings, copyPreviousSettings, toggleMenu } from "./dialogs.js";
 import { initI18n, toggleLanguage } from "./i18n.js";
+import { initLuts, importLutFiles } from "./luts-ui.js";
+import { initGridView, setViewMode, handleGridKey } from "./gridview.js";
+import { probeWorker } from "./worker-client.js";
+import { updateFormatSupport } from "./export.js";
 
 function setPreviewMode(mode) {
   state.previewMode = mode;
@@ -154,8 +158,10 @@ function bindDragDrop() {
     el.dropOverlay.hidden = true;
     const files = [...e.dataTransfer.files];
     const presetFiles = files.filter((f) => /\.(xmp|lrtemplate|json)$/i.test(f.name));
-    const images = files.filter((f) => !presetFiles.includes(f));
+    const lutFiles = files.filter((f) => /\.cube$/i.test(f.name));
+    const images = files.filter((f) => !presetFiles.includes(f) && !lutFiles.includes(f));
     if (presetFiles.length) importPresetFiles(presetFiles);
+    if (lutFiles.length) importLutFiles(lutFiles);
     if (images.length) loadFiles(images);
   });
 }
@@ -201,6 +207,21 @@ function onKeyDown(event) {
   const photo = activePhoto();
   if (!photo) return;
   const ownsKeys = focusOwnsKeys();
+  if (!ownsKeys && !event.shiftKey) {
+    if (key === "g") { setViewMode("grid"); return; }
+    if (key === "e") { setViewMode("loupe"); return; }
+    if (key === "n") { setViewMode("survey"); return; }
+  }
+  if (!ownsKeys && handleGridKey(event)) return;
+  if (state.viewMode !== "loupe") {
+    if (!ownsKeys && /^[0-5]$/.test(event.key)) setRating(targetPhotos(), Number(event.key));
+    else if (!ownsKeys && key === "p") setFlag(targetPhotos(), 1);
+    else if (!ownsKeys && key === "x") setFlag(targetPhotos(), -1);
+    else if (!ownsKeys && key === "u") setFlag(targetPhotos(), 0);
+    else if (!ownsKeys && event.key === "ArrowLeft") { event.preventDefault(); navigatePhoto(-1); }
+    else if (!ownsKeys && event.key === "ArrowRight") { event.preventDefault(); navigatePhoto(1); }
+    return;
+  }
 
   if (state.tool === "crop") {
     if (key === "x") { swapCropOrientation(); return; }
@@ -243,6 +264,7 @@ function start() {
     el.emptyState.append(h1, p1, p2);
     return;
   }
+  hooks.setPreviewMode = setPreviewMode;
   el.editorCanvas.addEventListener("webglcontextlost", (e) => {
     e.preventDefault();
     showToast("GPU bị mất kết nối — hãy tải lại trang. Phiên làm việc đã được tự lưu.", null, 10000);
@@ -254,6 +276,8 @@ function start() {
   initExport();
   initFilmstrip();
   initView();
+  initGridView();
+  initLuts();
   bindToolbar();
   bindCropBar();
   bindDragDrop();
@@ -268,9 +292,14 @@ function start() {
   updateHistogramInfo();
   updateFolderChip();
   initSession();
+  probeWorker().then((caps) => {
+    state.capabilities.worker = !!caps.webgl && (caps.maxTextureSize || 0) >= Math.min(state.renderer.maxTextureSize, 4096);
+    state.capabilities.avif = !!caps.avif;
+    updateFormatSupport();
+  });
   void scheduleHistogram;
   // Móc dùng cho kiểm thử tự động (test/e2e.mjs)
-  window.__luma = { state, activePhoto, setTool, exitMaskEditing, openFolderHandle, flushAutosave, residentCount };
+  window.__luma = { state, activePhoto, setTool, exitMaskEditing, openFolderHandle, flushAutosave, residentCount, setViewMode };
 }
 
 start();

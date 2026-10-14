@@ -1,7 +1,5 @@
 // Nhập / xuất preset. Thuần JS (không dùng DOM) để chạy được trong test Node.
 import { valueDefaults, controlById, hslColors } from "./config.js";
-import { parametricToPoints, composeCurves } from "./curve.js";
-import { isIdentityCurve } from "./settings.js";
 
 const NUMBER = "([+-]?\\d+(?:\\.\\d+)?)";
 const escapeRegex = (key) => key.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -116,18 +114,23 @@ export function parseLightroomPreset(text, fileName) {
   // Đường cong tông
   const curve = {};
   const pointCurve = extractCurvePoints(text, "ToneCurvePV2012");
-  const parametric = parametricToPoints({
-    shadows: extractPresetValue(text, "ParametricShadows") ?? 0,
-    darks: extractPresetValue(text, "ParametricDarks") ?? 0,
-    lights: extractPresetValue(text, "ParametricLights") ?? 0,
-    highlights: extractPresetValue(text, "ParametricHighlights") ?? 0,
-    s1: extractPresetValue(text, "ParametricShadowSplit") ?? 25,
-    s2: extractPresetValue(text, "ParametricMidtoneSplit") ?? 50,
-    s3: extractPresetValue(text, "ParametricHighlightSplit") ?? 75,
-  });
-  if (parametric && pointCurve && !isIdentityCurve(pointCurve)) curve.master = composeCurves(parametric, pointCurve);
-  else if (parametric) curve.master = parametric;
-  else if (pointCurve) curve.master = pointCurve;
+  // Đường cong tham số giữ nguyên dạng tham số (paramShadows…), áp dụng trước đường cong điểm
+  for (const [target, source] of [
+    ["paramShadows", "ParametricShadows"], ["paramDarks", "ParametricDarks"], ["paramLights", "ParametricLights"], ["paramHighlights", "ParametricHighlights"],
+    ["paramSplit1", "ParametricShadowSplit"], ["paramSplit2", "ParametricMidtoneSplit"], ["paramSplit3", "ParametricHighlightSplit"],
+  ]) {
+    const found = extractPresetValue(text, source);
+    if (found !== null) values[target] = clampControl(target, found);
+  }
+  if (pointCurve) curve.master = pointCurve;
+  // Hiệu chỉnh màu gốc (Camera Calibration)
+  for (const [target, source] of [
+    ["calShadowTint", "ShadowTint"], ["calRedHue", "RedHue"], ["calRedSat", "RedSaturation"],
+    ["calGreenHue", "GreenHue"], ["calGreenSat", "GreenSaturation"], ["calBlueHue", "BlueHue"], ["calBlueSat", "BlueSaturation"],
+  ]) {
+    const found = extractPresetValue(text, source);
+    if (found !== null) values[target] = clampControl(target, found);
+  }
   for (const [ch, key] of [["r", "ToneCurvePV2012Red"], ["g", "ToneCurvePV2012Green"], ["b", "ToneCurvePV2012Blue"]]) {
     const pts = extractCurvePoints(text, key);
     if (pts) curve[ch] = pts;
@@ -211,6 +214,10 @@ export function presetToXmp(preset, uuid = "00000000000000000000000000000000") {
     Texture: signed(v.texture), Clarity2012: signed(v.clarity), Dehaze: signed(v.dehaze), Vibrance: signed(v.vibrance), Saturation: signed(v.saturation),
     PostCropVignetteAmount: signed(v.vignette), GrainAmount: String(v.grain), GrainSize: String(v.grainSize),
     Sharpness: String(v.sharpen), LuminanceSmoothing: String(v.noise), ColorNoiseReduction: String(v.colorNoise),
+    ParametricShadows: signed(v.paramShadows), ParametricDarks: signed(v.paramDarks), ParametricLights: signed(v.paramLights), ParametricHighlights: signed(v.paramHighlights),
+    ParametricShadowSplit: String(v.paramSplit1), ParametricMidtoneSplit: String(v.paramSplit2), ParametricHighlightSplit: String(v.paramSplit3),
+    ShadowTint: signed(v.calShadowTint), RedHue: signed(v.calRedHue), RedSaturation: signed(v.calRedSat),
+    GreenHue: signed(v.calGreenHue), GreenSaturation: signed(v.calGreenSat), BlueHue: signed(v.calBlueHue), BlueSaturation: signed(v.calBlueSat),
   };
   for (const [id] of hslColors) {
     attrs[`HueAdjustment${id}`] = signed(v[`hslHue${id}`]);

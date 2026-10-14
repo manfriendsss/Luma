@@ -4,7 +4,11 @@ import { strict as assert } from "node:assert";
 import { parseLightroomPreset, extractPresetValue, presetToXmp, presetToLumaJson, migrateStoredPreset } from "../src/js/presets.js";
 import { createZipParts, concatParts, crc32 } from "../src/js/zip.js";
 import { findExifSegment, sanitizeExifSegment, injectExif } from "../src/js/jpeg-meta.js";
-import { makeCurveEvaluator, buildCurveLut, blendCurvePoints, LUT_SIZE } from "../src/js/curve.js";
+import { makeCurveEvaluator, buildCurveLut, blendCurvePoints, LUT_SIZE, makeParametric, parametricFromValues } from "../src/js/curve.js";
+import { valueDefaults } from "../src/js/config.js";
+import { parseCube, sampleLut } from "../src/js/lut.js";
+import { perspectiveParams, warpParams, fitPerspectiveScale } from "../src/js/geometry.js";
+import { calibrationMatrix } from "../src/js/color.js";
 import {
   outputToSource, sourceToOutput, fitCropInside, isCropInside, outputSize, rotateQuarter,
   cropRectInView, cropFromViewRect, applyAspect,
@@ -79,8 +83,8 @@ await test(".lrtemplate: Lua, Kelvin, đường cong tham số, split toning", a
   assert.equal(settings.values.blacks, 15);
   assert.ok(settings.values.temperature > 10 && settings.values.temperature < 40, `temperature ${settings.values.temperature}`);
   near(settings.values.tint, 8, 1e-9);
-  assert.ok(settings.curve.master.length > 3, "đường cong tham số được chuyển thành điểm");
-  const f = makeCurveEvaluator(settings.curve.master);
+  assert.ok(settings.values.paramShadows > 0, "đường cong tham số giữ dạng tham số");
+  const f = makeParametric(parametricFromValues({ ...valueDefaults, ...settings.values }));
   assert.ok(f(0.12) > 0.12, "ParametricShadows dương làm sáng vùng tối");
   assert.ok(f(0.88) < 0.88, "ParametricHighlights âm làm tối vùng sáng");
   assert.deepEqual(settings.grade.highlights, { h: 45, s: 18, l: 0 });
@@ -353,6 +357,76 @@ await test("Dịch giao diện: chuỗi tĩnh, chuỗi có biến và nhãn vùn
   assert.equal(translate("Đang chỉnh: Dải màu 2 · lớp phủ"), "Editing: Color range 2 · overlay");
   assert.equal(translate("Oval 1: Phơi sáng"), "Oval 1: Exposure");
   assert.equal(translate("tên-file-người-dùng.jpg"), null, "không dịch nội dung của người dùng");
+});
+
+await test("LUT .cube: đọc 3D/1D, DOMAIN, tra màu nội suy", () => {
+  const lines = ["TITLE \"Warm\"", "LUT_3D_SIZE 2", "DOMAIN_MIN 0 0 0", "DOMAIN_MAX 1 1 1"];
+  // LUT đảo màu: out = 1 - in
+  for (let b = 0; b < 2; b++) for (let g = 0; g < 2; g++) for (let r = 0; r < 2; r++) lines.push(`${1 - r} ${1 - g} ${1 - b}`);
+  const lut = parseCube(lines.join("\n"), "warm.cube");
+  assert.equal(lut.title, "Warm");
+  assert.equal(lut.size, 2);
+  const out = sampleLut(lut, [0.25, 0.5, 1]);
+  near(out[0], 0.75, 1e-6); near(out[1], 0.5, 1e-6); near(out[2], 0, 1e-6);
+  const oneD = parseCube(["LUT_1D_SIZE 2", "0 0 0", "0.5 1 1"].join("\n"), "half-red.cube");
+  assert.equal(oneD.size, 33);
+  near(sampleLut(oneD, [1, 0.5, 0.25])[0], 0.5, 1e-6);
+  near(sampleLut(oneD, [1, 0.5, 0.25])[1], 0.5, 1e-6);
+  assert.throws(() => parseCube("LUT_3D_SIZE 3\n0 0 0", "bad.cube"), /thiếu dữ liệu/);
+  assert.throws(() => parseCube("hello", "bad.cube"), /LUT_3D_SIZE/);
+});
+
+await test("Phối cảnh: ánh xạ hai chiều, chiều Dọc, thu phóng vừa khung", () => {
+  const W = 3000, H = 2000;
+  assert.equal(perspectiveParams(valueDefaults, W, H), null, "mặc định không biến đổi");
+  const values = { ...valueDefaults, perspVertical: 40, perspHorizontal: -15, perspRotate: 2.5, perspAspect: 10, perspX: 5 };
+  const warp = warpParams({ ...values, distortion: 20 }, W, H);
+  const crop = { cx: W / 2, cy: H / 2, w: W, h: H, angle: 0 };
+  for (const [u, v] of [[0.1, 0.1], [0.5, 0.5], [0.9, 0.3], [0.3, 0.95]]) {
+    const s = outputToSource(crop, u, v, warp);
+    const back = sourceToOutput(crop, s.x, s.y, warp);
+    near(back.u, u, 1e-4); near(back.v, v, 1e-4);
+  }
+  // Dọc dương: phía trên ảnh lấy mẫu từ vùng hẹp hơn (được mở rộng ra)
+  const up = warpParams({ ...valueDefaults, perspVertical: 50 }, W, H);
+  const topWidth = outputToSource(crop, 1, 0, up).x - outputToSource(crop, 0, 0, up).x;
+  const bottomWidth = outputToSource(crop, 1, 1, up).x - outputToSource(crop, 0, 1, up).x;
+  assert.ok(topWidth < bottomWidth, `trên ${topWidth} < dưới ${bottomWidth}`);
+  const scale = fitPerspectiveScale({ ...valueDefaults, perspVertical: 50 }, W, H);
+  assert.ok(scale > 100 && scale <= 150, `thu phóng ${scale}`);
+  const filled = warpParams({ ...valueDefaults, perspVertical: 50, perspScale: scale }, W, H);
+  for (const [u, v] of [[0, 0], [1, 0], [0, 1], [1, 1], [0.5, 0]]) {
+    const p = outputToSource(crop, u, v, filled);
+    assert.ok(p.x >= -1 && p.y >= -1 && p.x <= W + 1 && p.y <= H + 1, `góc (${u},${v}) nằm trong ảnh`);
+  }
+  assert.equal(warpParams({ ...values }, W, H, { transform: true }), null, "tắt nhóm Phối cảnh");
+});
+
+await test("Đường cong tham số và hiệu chỉnh màu gốc", () => {
+  assert.equal(makeParametric(parametricFromValues(valueDefaults)), null);
+  const lift = makeParametric(parametricFromValues({ ...valueDefaults, paramDarks: 80 }));
+  assert.ok(lift(0.37) > 0.37 && lift(0) === 0 && lift(1) === 1, "giữ điểm đen/trắng, nâng vùng tối vừa");
+  const lut = buildCurveLut({ master: [[0, 0], [1, 1]], r: [[0, 0], [1, 1]], g: [[0, 0], [1, 1]], b: [[0, 0], [1, 1]] }, parametricFromValues({ ...valueDefaults, paramHighlights: -100 }));
+  assert.ok(lut[Math.round(0.88 * (LUT_SIZE - 1)) * 4] < 0.88);
+  assert.equal(calibrationMatrix(valueDefaults), null);
+  const m = calibrationMatrix({ ...valueDefaults, calRedHue: 50, calBlueSat: -60 });
+  for (let r = 0; r < 3; r++) near(m[r * 3] + m[r * 3 + 1] + m[r * 3 + 2], 1, 1e-9);
+  assert.ok(Math.abs(m[3]) > 1e-3, "đỏ dịch sắc độ ảnh hưởng kênh lục");
+});
+
+await test("Thiết lập: LUT được sao chép, tạm tắt và đánh dấu đã chỉnh", () => {
+  const s = defaultSettings(100, 100);
+  s.lut = { id: "lut-1", name: "Warm" };
+  const c = cloneSettings(s);
+  assert.deepEqual(c.lut, s.lut);
+  assert.notEqual(c.lut, s.lut);
+  assert.ok(sectionModified(s, "lut"));
+  assert.equal(effectiveSettings({ ...s, disabled: { lut: true } }).lut, null);
+  s.values.perspVertical = 20;
+  assert.ok(sectionModified(s, "transform"));
+  const merged = mergeSettingGroups(defaultSettings(100, 100), s, ["lut"]);
+  assert.equal(merged.lut.id, "lut-1");
+  assert.equal(merged.values.perspVertical, 0, "nhóm Phối cảnh không được chép khi không chọn");
 });
 
 if (failures.length) {

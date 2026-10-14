@@ -13,8 +13,13 @@ import * as storage from "./storage.js";
 import { renderFilmstrip, updateFilmstripBadges } from "./filmstrip.js";
 import { onPhotoActivated, onNoPhoto } from "./panel.js";
 import { finishCrop, setTool, resetView, updateDimensions } from "./view.js";
+import { runTask, workerReady } from "./worker-client.js";
 
-const IMAGE_EXT = /\.(jpe?g|png|webp)$/i;
+const IMAGE_EXT = /\.(jpe?g|png|webp|avif|heic|heif)$/i;
+const HEIC_EXT = /\.(heic|heif)$/i;
+const decodeError = (file) => new Error(HEIC_EXT.test(file.name || "") || /hei[cf]/.test(file.type || "")
+  ? `${file.name}: trình duyệt này chưa đọc được HEIC/HEIF – hãy chuyển sang JPEG hoặc mở bằng Safari.`
+  : `${file.name}: không thể đọc ảnh.`);
 const RESIDENT_LIMIT = 2; // số ảnh giữ bản giải mã đầy đủ trong RAM
 const resident = [];
 
@@ -57,8 +62,7 @@ function canvasFrom(bitmap, maxSide) {
 
 async function makeThumbnail(bitmap) {
   const { canvas } = canvasFrom(bitmap, 320);
-  const blob = await new Promise((resolve) => canvas.toBlob(resolve, "image/jpeg", 0.82));
-  return blob ? URL.createObjectURL(blob) : "";
+  return new Promise((resolve) => canvas.toBlob(resolve, "image/jpeg", 0.82));
 }
 
 function computeStats(bitmap) {
@@ -134,24 +138,41 @@ export function normalizeSettings(settings, width, height) {
     crop: settings.crop ? fitCropInside({ ...base.crop, ...settings.crop }, width, height) : base.crop,
     masks,
     disabled: { ...(settings.disabled || {}) },
+    lut: settings.lut?.id ? { id: settings.lut.id, name: settings.lut.name || "LUT" } : null,
     preset: settings.preset ?? null,
   };
+}
+
+/** Giải mã lấy kích thước, thumbnail, thống kê – ưu tiên trong worker để không làm đứng giao diện. */
+async function analyzeFile(file) {
+  const max = state.renderer.maxTextureSize;
+  if (workerReady()) {
+    try {
+      const r = await runTask("analyze", { file, maxTextureSize: max }).promise;
+      if (r.tooLarge) throw Object.assign(new Error(`${file.name}: ảnh ${r.width}×${r.height} vượt giới hạn ${max}px của GPU trên máy này.`), { final: true });
+      return r;
+    } catch (error) {
+      if (error.final) throw error;
+      if (error.message === "decode") throw decodeError(file);
+      // worker lỗi bất thường → thử lại trên luồng chính
+    }
+  }
+  let bitmap;
+  try { bitmap = await decodeImage(file); } catch { throw decodeError(file); }
+  if (bitmap.width > max || bitmap.height > max) {
+    bitmap.close?.();
+    throw new Error(`${file.name}: ảnh ${bitmap.width}×${bitmap.height} vượt giới hạn ${max}px của GPU trên máy này.`);
+  }
+  const result = { width: bitmap.width, height: bitmap.height, thumbBlob: await makeThumbnail(bitmap), stats: computeStats(bitmap) };
+  bitmap.close?.(); // giải phóng ngay; sẽ giải mã lại khi ảnh được mở
+  return result;
 }
 
 export async function createPhoto(file, options = {}) {
   if (file.type && !file.type.startsWith("image/")) throw new Error(`${file.name}: định dạng không được hỗ trợ.`);
   return queued(async () => {
-    let bitmap;
-    try { bitmap = await decodeImage(file); } catch { throw new Error(`${file.name}: không thể đọc ảnh.`); }
-    const max = state.renderer.maxTextureSize;
-    if (bitmap.width > max || bitmap.height > max) {
-      bitmap.close?.();
-      throw new Error(`${file.name}: ảnh ${bitmap.width}×${bitmap.height} vượt giới hạn ${max}px của GPU trên máy này.`);
-    }
-    const width = bitmap.width, height = bitmap.height;
-    const thumbUrl = await makeThumbnail(bitmap);
-    const stats = computeStats(bitmap);
-    bitmap.close?.(); // giải phóng ngay; sẽ giải mã lại khi ảnh được mở
+    const { width, height, thumbBlob, stats } = await analyzeFile(file);
+    const thumbUrl = thumbBlob ? URL.createObjectURL(thumbBlob) : "";
     const scale = Math.min(1, MASK_TEXTURE_LONG_EDGE / Math.max(width, height));
     const photo = {
       id: options.id || uid(),
@@ -160,6 +181,9 @@ export async function createPhoto(file, options = {}) {
       name: options.name || file.name || "anh.jpg",
       source: options.source || { kind: "file" },
       thumbUrl,
+      thumbBlob,
+      previewUrl: null, // thumbnail đã áp thiết lập (lưới / filmstrip)
+      previewKey: null,
       bitmap: null,
       width,
       height,
@@ -219,8 +243,8 @@ async function addPhotos(entries, label) {
 }
 
 export async function loadFiles(files) {
-  const accepted = [...files].filter((f) => (f.type ? f.type.startsWith("image/") : IMAGE_EXT.test(f.name)));
-  if (!accepted.length) { showToast("Vui lòng chọn ảnh JPG, PNG hoặc WebP."); return []; }
+  const accepted = [...files].filter((f) => (f.type ? f.type.startsWith("image/") : IMAGE_EXT.test(f.name)) || IMAGE_EXT.test(f.name));
+  if (!accepted.length) { showToast("Vui lòng chọn ảnh JPG, PNG, WebP hoặc AVIF."); return []; }
   await startNewSessionIfNeeded();
   el.fileInput.value = "";
   return addPhotos(accepted.map((file) => ({ file, options: {} })));
@@ -256,7 +280,7 @@ export async function openFolderHandle(handle) {
     else if (name.endsWith(".luma.json")) sidecars.set(name.slice(0, -".luma.json".length), entry);
   }
   files.sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
-  if (!files.length) { showToast(`Thư mục “${handle.name}” không có ảnh JPG, PNG hoặc WebP.`); return; }
+  if (!files.length) { showToast(`Thư mục “${handle.name}” không có ảnh JPG, PNG, WebP hoặc AVIF.`); return; }
   const entries = [];
   let restored = 0;
   for (const name of files) {
@@ -335,6 +359,7 @@ export async function activatePhoto(id) {
   renderFilmstrip();
   markDirty(photo);
   document.querySelector(`.thumb-card[data-id="${CSS.escape(id)}"]`)?.scrollIntoView({ block: "nearest", inline: "nearest" });
+  if (state.viewMode !== "loupe") return; // lưới / so sánh: giải mã khi quay lại xem một ảnh
   if (!photo.bitmap) {
     setStatus("Đang giải mã ảnh…");
     try { await ensureBitmap(photo); } catch { showToast(`${photo.name}: không thể đọc ảnh.`); return; }
@@ -373,6 +398,7 @@ export function removePhoto(id) {
     const owner = fileOwner(photo);
     const fileStillUsed = state.photos.some((p) => fileOwner(p) === owner);
     if (!fileStillUsed) URL.revokeObjectURL(photo.thumbUrl);
+    if (photo.previewUrl) URL.revokeObjectURL(photo.previewUrl);
     releaseBitmap(photo);
     storage.deletePhotos([photo.id], { keepFile: fileStillUsed }).catch(() => {});
     // Nếu bản chính bị bỏ nhưng bản sao còn: chuyển file sang bản sao đầu tiên
@@ -423,6 +449,8 @@ export function createVirtualCopy(photo = activePhoto()) {
     liveBrush: null,
     presetState: null,
     pinned: false,
+    previewUrl: null,
+    previewKey: null,
     settings: cloneSettings(photo.settings),
     snapshots: [],
     history: [],

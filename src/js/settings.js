@@ -30,6 +30,7 @@ export function defaultSettings(width = 1, height = 1) {
     crop: defaultCrop(width, height),
     masks: [],
     disabled: {},
+    lut: null, // { id, name } – dữ liệu LUT nằm trong thư viện (IndexedDB), cường độ ở values.lutAmount
     preset: "natural",
   };
 }
@@ -96,6 +97,7 @@ export function cloneSettings(settings) {
     crop: { ...settings.crop },
     masks: settings.masks.map((m) => cloneMask(m)),
     disabled: { ...(settings.disabled || {}) },
+    lut: settings.lut ? { ...settings.lut } : null,
     preset: settings.preset ?? null,
   };
 }
@@ -112,6 +114,7 @@ export function effectiveSettings(settings) {
     if (section.id === "curve") out.curve = defaultCurve();
     if (section.id === "grade") out.grade = defaultGrade();
     if (section.id === "masks") out.masks = out.masks.map((m) => ({ ...m, visible: false }));
+    if (section.id === "lut") out.lut = null;
   }
   return out;
 }
@@ -120,9 +123,11 @@ export function effectiveSettings(settings) {
 export function sectionModified(settings, sectionId) {
   const section = panelSections.find((s) => s.id === sectionId);
   if (!section) return false;
-  if (section.keys) return section.keys.some((k) => Math.abs((settings.values[k] ?? 0) - valueDefaults[k]) > 1e-9);
+  const keysModified = section.keys ? section.keys.some((k) => Math.abs((settings.values[k] ?? valueDefaults[k]) - valueDefaults[k]) > 1e-9) : false;
+  if (sectionId === "lut") return !!settings.lut;
+  if (sectionId === "curve") return keysModified || Object.values(settings.curve).some((p) => !isIdentityCurve(p));
+  if (section.keys) return keysModified;
   if (sectionId === "hsl") return Object.values(hslGroups).flat().some((c) => settings.values[c.id]);
-  if (sectionId === "curve") return Object.values(settings.curve).some((p) => !isIdentityCurve(p));
   if (sectionId === "grade") {
     const g = settings.grade;
     return g.blending !== 50 || g.balance !== 0 || ["shadows", "midtones", "highlights", "global"].some((z) => g[z].s || g[z].l);
@@ -206,6 +211,7 @@ export function mergeSettingGroups(target, source, groupIds, targetSize) {
     if (group.keys) for (const key of group.keys) out.values[key] = source.values[key];
     if (id === "curve") out.curve = cloneCurve(source.curve);
     if (id === "grade") out.grade = cloneGrade(source.grade);
+    if (id === "lut") out.lut = source.lut ? { ...source.lut } : null;
     if (id === "masks") {
       const geometric = source.masks.filter((m) => m.type !== "brush").map((m) => ({ ...cloneMask(m, { keepBrush: false }), id: newMaskId() }));
       out.masks = [...out.masks.filter((m) => m.type === "brush"), ...geometric];

@@ -3,7 +3,7 @@ import { aspectRatios } from "./config.js";
 import { cloneSettings } from "./settings.js";
 import {
   outputSize, outputToSource, sourceToOutput, fitCropInside, isCropInside, straightenedBounds,
-  cropRectInView, cropFromViewRect, aspectValue, lensParams,
+  cropRectInView, cropFromViewRect, aspectValue, warpParams,
 } from "./geometry.js";
 import { neutralizeWhiteBalance, srgbToLinear } from "./color.js";
 import { computeHistogram, drawHistogram } from "./widgets.js";
@@ -33,11 +33,11 @@ function displayCrop(photo) {
   return state.tool === "crop" ? straightenedBounds(crop, photo.width, photo.height) : crop;
 }
 
-/** Méo ống kính đang áp dụng (null nếu không có hoặc nhóm Ống kính đang tắt). */
-export function lensOf(photo, settings = photo.settings) {
-  if (settings.disabled?.lens) return null;
-  return lensParams(settings.values.distortion, photo.width, photo.height);
+/** Biến dạng hình học đang áp dụng (méo ống kính + phối cảnh), bỏ qua nhóm đang tạm tắt. */
+export function warpOf(photo, settings = photo.settings) {
+  return warpParams(settings.values, photo.width, photo.height, settings.disabled || {});
 }
+export const lensOf = warpOf;
 
 export function computeLayout(photo) {
   const vp = el.canvasViewport;
@@ -157,19 +157,24 @@ function overlayMaskIndex(photo) {
 /** Thiết lập đang hiển thị: xem trước preset (khi rê chuột) hoặc thiết lập thật. */
 export const shownSettings = (photo) => state.previewSettings || photo.settings;
 
+/** Mốc so sánh đang dùng (bước lịch sử / snapshot) – chỉ áp dụng cho ảnh đang xem. */
+const compareReference = (photo) => (state.compareRef && state.compareRef.photoId === photo.id ? state.compareRef : null);
+
 export function render() {
   const photo = activePhoto();
-  if (!photo || state.exporting || !photo.bitmap) return;
+  if (!photo || state.exporting || !photo.bitmap || state.viewMode !== "loupe") return;
   const renderer = state.renderer;
   const layout = computeLayout(photo);
   state.layout = layout;
   sizeCanvas(layout);
   const settings = shownSettings(photo);
   renderer.setPhoto(photo);
-  renderer.syncMasks(settings.masks, photo.liveBrush);
   const mode = state.holdingBefore ? "before" : state.previewMode;
   const d = layout.dpr;
+  const ref = compareReference(photo);
   renderer.drawView(settings, {
+    liveBrush: photo.liveBrush,
+    reference: ref && state.tool !== "crop" ? ref.settings : null,
     crop: layout.crop,
     rect: { x: layout.x * d, y: layout.y * d, width: layout.width * d, height: layout.height * d },
     original: mode === "before",
@@ -179,7 +184,10 @@ export function render() {
   });
   el.zoomValue.textContent = state.tool === "crop" ? "Cắt" : (state.view.fit ? `Vừa · ${zoomPercent(layout)}%` : `${zoomPercent(layout)}%`);
   el.beforeBadge.hidden = mode !== "before";
-  el.beforeBadge.textContent = "ẢNH GỐC";
+  el.beforeBadge.textContent = ref ? `MỐC: ${ref.label}` : "ẢNH GỐC";
+  el.compareBadge.hidden = !ref || state.tool === "crop";
+  if (ref) el.compareBadgeText.textContent = `So sánh với: ${ref.label}`;
+  el.splitBeforeLabel.textContent = ref ? "MỐC" : "TRƯỚC";
   el.previewBadge.hidden = !state.previewSettings;
   el.previewBadge.textContent = `XEM TRƯỚC · ${state.previewLabel}`;
   updateMaskBadge(photo);
@@ -235,12 +243,12 @@ export function viewportPoint(event) {
 export function screenToSource(photo, p, layout = state.layout) {
   const u = (p.x - layout.x) / layout.width;
   const v = (p.y - layout.y) / layout.height;
-  const s = outputToSource(layout.crop, u, v, lensOf(photo));
+  const s = outputToSource(layout.crop, u, v, warpOf(photo));
   return { x: s.x, y: s.y, u, v };
 }
 
 export function sourceToScreen(photo, x, y, layout = state.layout) {
-  const { u, v } = sourceToOutput(layout.crop, x, y, lensOf(photo));
+  const { u, v } = sourceToOutput(layout.crop, x, y, warpOf(photo));
   return { x: layout.x + u * layout.width, y: layout.y + v * layout.height };
 }
 
@@ -332,6 +340,12 @@ export function updateOverlay(layout = state.layout) {
         html += `<circle class="geo-handle${name === "center" ? "" : " geo-handle-alt"}${name === "rotate" ? " geo-rotate" : ""}" cx="${fx}" cy="${fy}" r="${name === "center" ? 6 : 5}"/>`;
       }
     }
+  }
+  if (state.showGuideGrid && state.tool !== "crop") {
+    const W = layout.width, H = layout.height;
+    const step = Math.max(24, Math.min(W, H) / 8);
+    for (let x = step; x < W; x += step) html += `<line class="guide-grid" x1="${x}" y1="0" x2="${x}" y2="${H}"/>`;
+    for (let y = step; y < H; y += step) html += `<line class="guide-grid" x1="0" y1="${y}" x2="${W}" y2="${y}"/>`;
   }
   svg.innerHTML = html;
 }
@@ -433,7 +447,7 @@ function onPointerDown(event) {
   if (event.button === 2) return;
   const p = viewportPoint(event);
   const layout = state.layout;
-  const capture = () => el.canvasViewport.setPointerCapture(event.pointerId);
+  const capture = () => { try { el.canvasViewport.setPointerCapture(event.pointerId); } catch { /* con trỏ đã kết thúc */ } };
 
   if (event.button === 1 || state.spaceDown) {
     event.preventDefault();
@@ -479,7 +493,7 @@ function onPointerDown(event) {
   if (mask && mask.visible !== false) {
     if (mask.type === "brush" && insideImage(p)) {
       event.preventDefault();
-      startBrushStroke(photo, mask, p, event.altKey);
+      startBrushStroke(photo, mask, p, event.altKey, pressureOf(event));
       capture();
       return;
     }
@@ -556,7 +570,9 @@ function onPointerMove(event) {
     state.splitPos = clamp((p.x - layout.x) / layout.width, 0.02, 0.98);
     scheduleRender();
   } else if (g.kind === "brush") {
-    continueBrushStroke(photo, p);
+    const events = event.getCoalescedEvents?.() || [];
+    if (events.length > 1) for (const e of events) { g.pressure = pressureOf(e); continueBrushStroke(photo, viewportPoint(e)); }
+    else { g.pressure = pressureOf(event); continueBrushStroke(photo, p); }
     updateBrushCursor(p);
   } else if (g.kind === "mask-geo") {
     updateMaskGeometry(photo, g, screenToSource(photo, p, layout), event);
@@ -654,10 +670,17 @@ function brushSettings() {
     size: Number(el.brushSizeRange.value),
     feather: Number(el.brushFeatherRange.value) / 100,
     flow: Number(el.brushFlowRange.value) / 100,
+    pressureMode: el.brushPressureSelect.value, // "size" | "flow" | "none"
   };
 }
 
-function startBrushStroke(photo, mask, p, altKey) {
+/** Lực nhấn của bút cảm ứng (0..1); chuột / chạm luôn trả về null = không dùng lực nhấn. */
+export function pressureOf(event) {
+  if (event.pointerType !== "pen" || !(event.pressure > 0)) return null;
+  return Math.min(1, event.pressure);
+}
+
+function startBrushStroke(photo, mask, p, altKey, pressure = null) {
   const { width, height } = photo.maskSize;
   const canvas = document.createElement("canvas");
   canvas.width = width;
@@ -674,7 +697,7 @@ function startBrushStroke(photo, mask, p, altKey) {
   }
   const erase = altKey || el.eraseMaskToggle.checked;
   photo.liveBrush = { maskId: mask.id, canvas, ctx, version: 0 };
-  state.gesture = { kind: "brush", snapshot: beginGesture(photo, erase ? `Tẩy ${maskLabel(photo, mask)}` : `Tô ${maskLabel(photo, mask)}`), last: null, erase };
+  state.gesture = { kind: "brush", snapshot: beginGesture(photo, erase ? `Tẩy ${maskLabel(photo, mask)}` : `Tô ${maskLabel(photo, mask)}`), last: null, erase, pressure };
   continueBrushStroke(photo, p);
 }
 
@@ -685,8 +708,12 @@ function continueBrushStroke(photo, p) {
   const src = screenToSource(photo, p);
   const mx = (src.x / photo.width) * photo.maskSize.width;
   const my = (src.y / photo.height) * photo.maskSize.height;
-  const { size, feather, flow } = brushSettings();
-  const radius = Math.max(0.6, (size / 2) * (state.layout.out.width / state.layout.width) * (photo.maskSize.width / photo.width));
+  const { size, feather, flow: baseFlow, pressureMode } = brushSettings();
+  const pressure = g.pressure;
+  const usePressure = pressure !== null && pressure !== undefined && pressureMode !== "none";
+  const sizeFactor = usePressure && pressureMode === "size" ? 0.15 + 0.85 * pressure : 1;
+  const flow = usePressure && pressureMode === "flow" ? baseFlow * Math.max(0.05, pressure) : baseFlow;
+  const radius = Math.max(0.6, (size / 2) * sizeFactor * (state.layout.out.width / state.layout.width) * (photo.maskSize.width / photo.width));
   const ctx = live.ctx;
   const color = g.erase ? "0,0,0" : "255,255,255";
   const dab = (x, y) => {

@@ -15,7 +15,7 @@ export const state = {
   showMaskOverlay: false,
   clipping: false,
   clipboard: null,
-  syncGroups: settingGroups.filter((g) => !["crop", "masks"].includes(g.id)).map((g) => g.id),
+  syncGroups: settingGroups.filter((g) => !["crop", "masks", "transform"].includes(g.id)).map((g) => g.id),
   drawerOpen: false,
   panelOpen: false,
   curveChannel: "master",
@@ -32,6 +32,11 @@ export const state = {
   folders: new Map(), // key → { handle, writable }
   sidecarEnabled: true,
   renderer: null,
+  luts: new Map(), // id → { id, name, size, data, domainMin, domainMax }
+  viewMode: "loupe", // "loupe" | "grid" | "survey"
+  compareRef: null,
+  showGuideGrid: false, // { label, settings } – mốc so sánh thay cho ảnh gốc
+  capabilities: { worker: false, avif: false },
 };
 
 export const $ = (id) => document.getElementById(id);
@@ -44,6 +49,7 @@ export const hooks = {
   historyChanged: [],
   markDirty: () => {},
   scheduleRender: () => {},
+  setPreviewMode: null,
 };
 export const onSettingsChanged = (fn) => hooks.settingsChanged.push(fn);
 export const scheduleRender = () => hooks.scheduleRender();

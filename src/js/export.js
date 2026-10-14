@@ -1,8 +1,10 @@
 // Xuất ảnh: preset xuất, mẫu tên file, làm nét đầu ra, ZIP / thư mục / tải từng file, giữ EXIF.
-import { builtInExportPresets, outputSharpenAmounts } from "./config.js";
+import { builtInExportPresets, outputSharpenAmounts, defaultWatermark, watermarkPositions } from "./config.js";
 import { outputSize } from "./geometry.js";
 import { createZipParts } from "./zip.js";
-import { findExifSegment, sanitizeExifSegment, injectExif } from "./jpeg-meta.js";
+import { renderExportBlob, decodeBlob } from "./render-tasks.js";
+import { runTask, workerReady } from "./worker-client.js";
+import { loadAsset, saveAsset } from "./lut.js";
 import { state, el, clamp, activePhoto, showToast, setStatus, downloadBlob, safeLocalStorage, slug, uid, scheduleRender } from "./core.js";
 import { ensureBitmap, releaseBitmap } from "./photos.js";
 import { selectedPhotos, visiblePhotos } from "./filmstrip.js";
@@ -15,7 +17,33 @@ const EXPORT_PRESETS_KEY = "luma.exportPresets";
 const LAST_EXPORT_KEY = "luma.lastExport";
 let userExportPresets = safeLocalStorage(() => JSON.parse(localStorage.getItem(EXPORT_PRESETS_KEY) || "[]"), []);
 
-const allExportPresets = () => [...builtInExportPresets, ...userExportPresets];
+const formatSupported = (format) => format !== "image/avif" || state.capabilities.avif;
+const allExportPresets = () => [...builtInExportPresets.filter((p) => !p.requires || formatSupported(p.requires)), ...userExportPresets];
+let watermarkLogo = null; // Blob
+
+function readWatermark() {
+  return {
+    enabled: el.watermarkToggle.checked,
+    text: el.watermarkText.value,
+    useLogo: el.watermarkLogoToggle.checked && !!watermarkLogo,
+    position: el.watermarkPosition.value,
+    size: Number(el.watermarkSize.value),
+    opacity: Number(el.watermarkOpacity.value),
+    margin: defaultWatermark.margin,
+    color: el.watermarkColor.value,
+  };
+}
+
+function writeWatermark(w) {
+  const o = { ...defaultWatermark, ...(w || {}) };
+  el.watermarkToggle.checked = !!o.enabled;
+  el.watermarkText.value = o.text;
+  el.watermarkLogoToggle.checked = !!o.useLogo;
+  el.watermarkPosition.value = o.position;
+  el.watermarkSize.value = o.size;
+  el.watermarkOpacity.value = o.opacity;
+  el.watermarkColor.value = o.color;
+}
 
 function readOptions() {
   return {
@@ -27,11 +55,12 @@ function readOptions() {
     template: el.templateInput.value.trim() || "{name}-luma",
     keepExif: el.keepExifToggle.checked,
     keepGps: el.keepGpsToggle.checked,
+    watermark: readWatermark(),
   };
 }
 
 function writeOptions(o) {
-  el.formatSelect.value = o.format;
+  el.formatSelect.value = formatSupported(o.format) ? o.format : "image/jpeg";
   el.qualityRange.value = o.quality;
   el.qualityValue.textContent = `${o.quality}%`;
   el.resizeSelect.value = o.resize;
@@ -40,6 +69,7 @@ function writeOptions(o) {
   el.templateInput.value = o.template || "{name}-luma";
   el.keepExifToggle.checked = o.keepExif !== false;
   el.keepGpsToggle.checked = !!o.keepGps;
+  writeWatermark(o.watermark);
   syncFields();
 }
 
@@ -50,6 +80,13 @@ function syncFields() {
   el.keepGpsToggle.disabled = !el.keepExifToggle.checked;
   el.qualityValue.textContent = `${el.qualityRange.value}%`;
   setRangeProgress(el.qualityRange);
+  el.watermarkBody.hidden = !el.watermarkToggle.checked;
+  el.watermarkSizeValue.textContent = `${el.watermarkSize.value}%`;
+  el.watermarkOpacityValue.textContent = `${el.watermarkOpacity.value}%`;
+  setRangeProgress(el.watermarkSize);
+  setRangeProgress(el.watermarkOpacity);
+  el.watermarkLogoToggle.disabled = !watermarkLogo;
+  el.watermarkLogoPreview.hidden = !watermarkLogo;
   updateTemplatePreview();
 }
 
@@ -129,7 +166,7 @@ function updateTemplatePreview() {
   el.templatePreview.textContent = `Ví dụ: ${formatFileName(el.templateInput.value || "{name}-luma", photo, { index: 1, width, height })}.${extensionForType(el.formatSelect.value)}`;
 }
 
-const extensionForType = (type) => (type === "image/png" ? "png" : type === "image/webp" ? "webp" : "jpg");
+const extensionForType = (type) => ({ "image/png": "png", "image/webp": "webp", "image/avif": "avif" }[type] || "jpg");
 
 function uniqueName(base, ext, used) {
   let name = `${base}.${ext}`;
@@ -154,53 +191,68 @@ function exportDimensions(photo, options) {
   return { width, height };
 }
 
+/** Thiết lập thuần (gửi được sang worker). */
+function plainSettings(settings) {
+  return { ...settings, masks: settings.masks.map((m) => ({ ...m, brush: m.brush ? { width: m.brush.width, height: m.brush.height, data: m.brush.data, version: m.brush.version } : null })) };
+}
+
 async function renderPhotoToBlob(photo, options, shouldCancel, onProgress) {
   const { width, height } = exportDimensions(photo, options);
   if (width * height > 250_000_000 || width > 32000 || height > 32000) {
     throw new Error(`${photo.name}: ${width}×${height} vượt giới hạn canvas của trình duyệt. Hãy giảm kích thước xuất.`);
   }
+  const outputSharpen = outputSharpenAmounts[options.sharpen] || 0;
+  const lut = photo.settings.lut ? state.luts.get(photo.settings.lut.id) || null : null;
+  const common = {
+    photoWidth: photo.width, photoHeight: photo.height, maskSize: photo.maskSize, width, height, outputSharpen,
+    format: options.format, quality: options.quality / 100, watermark: options.watermark,
+  };
+  // Ưu tiên worker: giao diện không bị đứng khi xuất ảnh lớn
+  if (workerReady()) {
+    const job = runTask("export", {
+      ...common,
+      file: photo.file,
+      settings: plainSettings(photo.settings),
+      lut,
+      logo: options.watermark?.useLogo ? watermarkLogo : null,
+      keepExif: options.keepExif,
+      keepGps: options.keepGps,
+    }, { onProgress });
+    const timer = setInterval(() => { if (shouldCancel()) job.cancel(); }, 120);
+    try {
+      const { blob } = await job.promise;
+      return { blob, width, height };
+    } catch (error) {
+      if (error.name === "AbortError" || shouldCancel()) throw new DOMException("Đã huỷ", "AbortError");
+      if (/không mã hoá được/.test(error.message)) throw new Error(`${photo.name}: ${error.message}`);
+      // lỗi khác của worker → thử lại trên luồng chính
+    } finally {
+      clearInterval(timer);
+    }
+  }
   const renderer = state.renderer;
   const wasResident = !!photo.bitmap;
   photo.pinned = true;
+  let logo = null;
   try {
     await ensureBitmap(photo);
-    renderer.photoId = null;
-    renderer.setPhoto(photo);
-    renderer.syncMasks(photo.settings.masks, null);
-    const canvas = document.createElement("canvas");
-    canvas.width = width;
-    canvas.height = height;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) throw new Error(`${photo.name}: không đủ bộ nhớ để tạo ảnh ${width}×${height}.`);
-    let done = 0;
-    const tile = renderer.maxTileSize();
-    const totalTiles = Math.ceil(width / tile) * Math.ceil(height / tile);
-    await renderer.renderTiled(photo.settings, {
-      crop: photo.settings.crop,
-      width,
-      height,
+    if (options.watermark?.enabled && options.watermark.useLogo && watermarkLogo) logo = await decodeBlob(watermarkLogo).catch(() => null);
+    const blob = await renderExportBlob(renderer, {
+      ...common,
+      bitmap: photo.bitmap,
+      photoId: photo.id,
+      settings: photo.settings,
+      logo,
+      exif: { file: photo.file, keepExif: options.keepExif, keepGps: options.keepGps },
       shouldCancel,
-      outputSharpen: outputSharpenAmounts[options.sharpen] || 0,
-      onTile: ({ x, y, width: w, height: h, pixels }) => {
-        ctx.putImageData(new ImageData(new Uint8ClampedArray(pixels.buffer), w, h), x, y);
-        done += 1;
-        onProgress?.(done / totalTiles);
-      },
+      onProgress,
     });
-    let blob = await new Promise((resolve, reject) => canvas.toBlob((b) => (b ? resolve(b) : reject(new Error(`${photo.name}: không thể mã hoá file xuất.`))), options.format, options.quality / 100));
-    canvas.width = canvas.height = 1;
-    if (options.format === "image/jpeg" && options.keepExif) {
-      try {
-        const original = new Uint8Array(await photo.file.slice(0, 256 * 1024).arrayBuffer());
-        const segment = findExifSegment(original);
-        const clean = segment && sanitizeExifSegment(segment, { width, height, keepGps: options.keepGps });
-        if (clean) blob = new Blob([injectExif(new Uint8Array(await blob.arrayBuffer()), clean)], { type: options.format });
-      } catch {
-        // EXIF không bắt buộc
-      }
-    }
     return { blob, width, height };
+  } catch (error) {
+    if (error.name === "AbortError") throw error;
+    throw new Error(`${photo.name}: ${error.message || "xuất thất bại."}`);
   } finally {
+    logo?.close?.();
     photo.pinned = false;
     if (!wasResident && photo.id !== state.activeId) releaseBitmap(photo);
   }
@@ -316,6 +368,18 @@ function deleteExportPreset() {
   renderExportPresetSelect("");
 }
 
+function setWatermarkLogo(blob) {
+  watermarkLogo = blob;
+  if (el.watermarkLogoPreview.src) URL.revokeObjectURL(el.watermarkLogoPreview.src);
+  el.watermarkLogoPreview.src = blob ? URL.createObjectURL(blob) : "";
+}
+
+/** Hiện tuỳ chọn AVIF khi trình duyệt mã hoá được. */
+export function updateFormatSupport() {
+  el.avifOption.hidden = !state.capabilities.avif;
+  el.avifOption.disabled = !state.capabilities.avif;
+}
+
 export function initExport() {
   el.exportButton.addEventListener("click", openExportDialog);
   el.exportScopeSelect.addEventListener("change", updateExportCount);
@@ -325,6 +389,27 @@ export function initExport() {
   el.qualityRange.addEventListener("input", () => { el.exportPresetSelect.value = ""; syncFields(); });
   el.longEdgeInput.addEventListener("input", () => { el.exportPresetSelect.value = ""; updateTemplatePreview(); });
   el.templateInput.addEventListener("input", updateTemplatePreview);
+  for (const [value, label] of watermarkPositions) {
+    const o = document.createElement("option");
+    o.value = value;
+    o.textContent = label;
+    el.watermarkPosition.appendChild(o);
+  }
+  const markCustom = () => { el.exportPresetSelect.value = ""; syncFields(); };
+  for (const input of [el.watermarkToggle, el.watermarkLogoToggle, el.watermarkPosition, el.watermarkColor]) input.addEventListener("change", markCustom);
+  for (const input of [el.watermarkSize, el.watermarkOpacity, el.watermarkText]) input.addEventListener("input", markCustom);
+  el.watermarkLogoButton.addEventListener("click", () => el.logoFileInput.click());
+  el.logoFileInput.addEventListener("change", async () => {
+    const file = el.logoFileInput.files[0];
+    el.logoFileInput.value = "";
+    if (!file) return;
+    try { (await decodeBlob(file)).close?.(); } catch { showToast("Không đọc được file logo."); return; }
+    setWatermarkLogo(file);
+    saveAsset("watermarkLogo", file).catch(() => {});
+    el.watermarkLogoToggle.checked = true;
+    markCustom();
+  });
+  loadAsset("watermarkLogo").then((blob) => { if (blob) { setWatermarkLogo(blob); syncFields(); } });
   el.exportPresetSelect.addEventListener("change", () => {
     const preset = allExportPresets().find((p) => p.id === el.exportPresetSelect.value);
     if (preset) writeOptions({ ...builtInExportPresets[0].options, ...preset.options });

@@ -102,3 +102,23 @@ export function hueToRgb(hueDegrees) {
   const table = [[1, x, 0], [x, 1, 0], [0, 1, x], [0, x, 1], [x, 0, 1], [1, 0, x]];
   return table[Math.floor(h) % 6];
 }
+
+/**
+ * Ma trận hiệu chỉnh màu gốc (Calibration) 3×3 (hàng trước), áp dụng trong không gian tuyến tính.
+ * Mỗi màu cơ bản R/G/B được xoay sắc độ (±30°) và đổi bão hoà; các hàng được chuẩn hoá để màu xám giữ nguyên.
+ * Trả về null nếu không có chỉnh sửa.
+ */
+export function calibrationMatrix(v = {}) {
+  const keys = ["calRedHue", "calRedSat", "calGreenHue", "calGreenSat", "calBlueHue", "calBlueSat"];
+  if (keys.every((k) => !v[k])) return null;
+  const primaries = [[0, "Red"], [120, "Green"], [240, "Blue"]].map(([hue, name]) => {
+    const rgb = hueToRgb(hue + ((v[`cal${name}Hue`] || 0) / 100) * 30).map(srgbToLinear);
+    const y = luma(...rgb);
+    const sat = 1 + (v[`cal${name}Sat`] || 0) / 100 * 0.6;
+    return rgb.map((c) => y + (c - y) * sat);
+  });
+  // Cột i = màu mới của màu cơ bản i
+  const m = [0, 1, 2].map((r) => [0, 1, 2].map((c) => primaries[c][r]));
+  // Chuẩn hoá từng hàng để (1,1,1) → (1,1,1)
+  return m.flatMap((row) => { const sum = row[0] + row[1] + row[2] || 1; return row.map((x) => x / sum); });
+}

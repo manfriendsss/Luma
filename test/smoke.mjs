@@ -14,6 +14,9 @@ for (const id of [
   "rangeControls", "histogramCanvas", "histogramInfo", "curveCanvas", "gradeWheels", "lensControls", "historyList", "snapshotList",
   "snapshotButton", "cropBar", "cropAngleRange", "cropGridSelect", "swapCropButton", "clippingButton", "eyedropperButton",
   "autoToneButton", "previewBadge", "maskBadge", "restoreCard", "folderChip", "storageInfo", "settingsDialog", "nameDialog", "shortcutsDialog",
+  "gridView", "gridList", "gridSizeRange", "surveyView", "surveyGrid", "compareBadge", "compareBadgeClear", "lutSelect", "lutFileInput",
+  "importLutButton", "lutControls", "transformControls", "transformFitButton", "guideGridToggle", "calibrationControls", "curveParamControls",
+  "brushPressureSelect", "watermarkToggle", "watermarkText", "watermarkPosition", "logoFileInput", "avifOption",
 ]) {
   assert.match(html, new RegExp(`id=["']${id}["']`), `thiếu #${id}`);
 }
@@ -22,7 +25,7 @@ assert.match(html, />LUMA</, "thương hiệu LUMA viết hoa");
 assert.match(html, /id="presetDrawer"[^>]*\binert\b/, "ngăn preset đóng phải có inert");
 assert.match(html, /id="controlPanel"[^>]*\binert\b/, "bảng điều chỉnh đóng phải có inert");
 assert.doesNotMatch(html, /drawerBackdrop/, "ngăn preset không còn lớp phủ làm mờ ảnh");
-assert.equal((html.match(/data-section="/g) || []).length, 10, "đủ 10 nhóm trong bảng điều chỉnh");
+assert.equal((html.match(/data-section="/g) || []).length, 13, "đủ 13 nhóm trong bảng điều chỉnh");
 
 const modules = {
   "main.js": ["onKeyDown", "start", "bindToolbar"],
@@ -36,12 +39,19 @@ const modules = {
   "filmstrip.js": ["renderFilmstrip", "passesFilter", "navigatePhoto"],
   "session.js": ["flushAutosave", "restoreSession"],
   "i18n.js": ["setLanguage", "translate"],
+  "gridview.js": ["setViewMode", "renderGrid", "renderSurvey", "refreshPreviews", "handleGridKey"],
+  "luts-ui.js": ["importLutFiles", "syncLutPanel", "initLuts"],
+  "lut.js": ["parseCube", "sampleLut"],
+  "render-tasks.js": ["renderPreviewBlob", "renderExportBlob", "canEncode"],
+  "worker-client.js": ["runTask", "probeWorker"],
+  "watermark.js": ["drawWatermark"],
+  "geometry.js": ["perspectiveParams", "warpParams", "fitPerspectiveScale"],
 };
 for (const [file, fns] of Object.entries(modules)) {
   const code = await read(`src/js/${file}`);
   for (const fn of fns) assert.match(code, new RegExp(`function\\s+${fn}\\b`), `${file}: thiếu ${fn}()`);
 }
-for (const module of ["config", "settings", "renderer", "geometry", "presets", "curve", "color", "widgets", "controls", "zip", "jpeg-meta", "storage"]) {
+for (const module of ["config", "settings", "renderer", "geometry", "presets", "curve", "color", "widgets", "controls", "zip", "jpeg-meta", "storage", "worker"]) {
   await read(`src/js/${module}.js`);
 }
 console.log("✓ LUMA smoke checks passed.");

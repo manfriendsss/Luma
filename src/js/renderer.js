@@ -4,9 +4,9 @@
 // - Mọi bán kính (độ nét, kết cấu, hạt) tính theo pixel ẢNH GỐC → xem trước và file xuất giống nhau.
 // - Hỗ trợ tối đa MAX_MASKS vùng chọn, cắt/xoay, đường cong tông, phân màu, render theo ô khi xuất.
 import { MAX_MASKS, hslColors } from "./config.js";
-import { buildCurveLut, LUT_SIZE } from "./curve.js";
-import { whiteBalanceMultipliers, hueToRgb, luma } from "./color.js";
-import { cropMatrix, outputSize, lensParams } from "./geometry.js";
+import { buildCurveLut, LUT_SIZE, parametricFromValues } from "./curve.js";
+import { whiteBalanceMultipliers, hueToRgb, luma, calibrationMatrix } from "./color.js";
+import { cropMatrix, outputSize, lensParams, perspectiveParams } from "./geometry.js";
 import { effectiveSettings } from "./settings.js";
 
 const MASK_TYPE_CODE = { sky: 1, brush: 2, linear: 3, radial: 4, luma: 5, color: 5 };
@@ -25,7 +25,16 @@ void main() {
 const fragmentShaderSource = `#version 300 es
 precision highp float;
 precision highp sampler2DArray;
+precision highp sampler3D;
 uniform sampler2D u_image;
+uniform sampler3D u_lut;
+uniform vec4 u_lutParams;  // cường độ, kích thước, hiệu lực
+uniform vec3 u_lutMin;
+uniform vec3 u_lutScale;
+uniform mat3 u_persp;
+uniform vec4 u_perspC;     // tâm x, tâm y, L, hiệu lực
+uniform mat3 u_calib;
+uniform vec2 u_calibParams; // hiệu lực, sắc thái vùng tối
 uniform sampler2D u_curve;
 uniform sampler2DArray u_masks;
 uniform vec2 u_imageSize;
@@ -229,6 +238,10 @@ float maskValue(int i, vec2 px, vec2 uv, vec3 sourceGamma) {
 
 void main() {
   vec2 px = u_cropCenter + u_cropMat * (v_out - 0.5);
+  if (u_perspC.w > 0.5) {
+    vec3 h = u_persp * vec3((px - u_perspC.xy) / u_perspC.z, 1.0);
+    px = h.z > 1e-4 ? u_perspC.xy + h.xy / h.z * u_perspC.z : vec2(-1e6);
+  }
   if (u_lens.w > 0.5) {
     vec2 d = px - u_imageSize * 0.5;
     px = u_imageSize * 0.5 + d * u_lens.y * (1.0 + u_lens.x * dot(d, d) * u_lens.z);
@@ -257,8 +270,13 @@ void main() {
   vec3 dTexture = (blurFine - blurTexture) * min(1.0, textureTrue / (textureRadius * 0.5));
   vec3 dClarity = (srcGamma - blurClarity) * min(1.0, clarityTrue / clarityRadius);
 
-  vec3 lin = srcLin * exp2(u_exposure) * u_wb;
+  vec3 lin = u_calibParams.x > 0.5 ? max(u_calib * srcLin, 0.0) : srcLin;
+  lin = lin * exp2(u_exposure) * u_wb;
   vec3 c = toGamma(lin);
+  if (u_calibParams.y != 0.0) {
+    float sh = 1.0 - smoothstep(0.0, 0.55, clamp(luminance(c), 0.0, 1.0));
+    c += vec3(0.5, -1.0, 0.5) * u_calibParams.y * 0.07 * sh;
+  }
   float mid = 1.0 - abs(clamp(luminance(c), 0.0, 1.0) - 0.5) * 1.4;
   c += dTexture * u_presence.x * 1.1;
   c += dClarity * u_presence.y * 0.75 * clamp(mid, 0.0, 1.0);
@@ -289,6 +307,13 @@ void main() {
   c = saturate(c, u_saturation);
   c = applyHslMix(c);
   c = applyGrade(c);
+
+  if (u_lutParams.z > 0.5) {
+    float n = u_lutParams.y;
+    vec3 cc = clamp((c - u_lutMin) * u_lutScale, 0.0, 1.0);
+    vec3 looked = texture(u_lut, cc * ((n - 1.0) / n) + 0.5 / n).rgb;
+    c = mix(c, looked, u_lutParams.x);
+  }
 
   float overlay = 0.0;
   for (int i = 0; i < ${MAX_MASKS}; i++) {
@@ -364,6 +389,11 @@ export class Renderer {
     gl.uniform1i(this.uniforms.u_image, 0);
     gl.uniform1i(this.uniforms.u_curve, 1);
     gl.uniform1i(this.uniforms.u_masks, 2);
+    gl.uniform1i(this.uniforms.u_lut, 4);
+    this.lutTexture = gl.createTexture();
+    this.lutKey = null;
+    this.lutResolver = null; // (lutRef) => { id, size, data, domainMin, domainMax } | null
+    this.uploadLut(null);
     this.curveTexture = gl.createTexture();
     this.curveKey = null;
     this.maskTexture = null;
@@ -463,13 +493,36 @@ export class Renderer {
     }
   }
 
-  setCurve(curve) {
-    const key = JSON.stringify(curve);
+  /** Nạp LUT 3D (null → LUT đơn vị 2×2×2). */
+  uploadLut(lut) {
+    const key = lut ? `${lut.id}:${lut.size}` : "identity";
+    if (key === this.lutKey) return;
+    const gl = this.gl;
+    gl.activeTexture(gl.TEXTURE4);
+    gl.bindTexture(gl.TEXTURE_3D, this.lutTexture);
+    gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
+    if (lut) {
+      gl.texImage3D(gl.TEXTURE_3D, 0, gl.RGB16F, lut.size, lut.size, lut.size, 0, gl.RGB, gl.FLOAT, lut.data instanceof Float32Array ? lut.data : new Float32Array(lut.data));
+    } else {
+      const id = new Float32Array(24);
+      let o = 0;
+      for (let b = 0; b < 2; b++) for (let g = 0; g < 2; g++) for (let r = 0; r < 2; r++) { id[o++] = r; id[o++] = g; id[o++] = b; }
+      gl.texImage3D(gl.TEXTURE_3D, 0, gl.RGB16F, 2, 2, 2, 0, gl.RGB, gl.FLOAT, id);
+    }
+    gl.pixelStorei(gl.UNPACK_ALIGNMENT, 4);
+    for (const p of [gl.TEXTURE_MIN_FILTER, gl.TEXTURE_MAG_FILTER]) gl.texParameteri(gl.TEXTURE_3D, p, gl.LINEAR);
+    for (const p of [gl.TEXTURE_WRAP_S, gl.TEXTURE_WRAP_T, gl.TEXTURE_WRAP_R]) gl.texParameteri(gl.TEXTURE_3D, p, gl.CLAMP_TO_EDGE);
+    this.lutKey = key;
+  }
+
+  setCurve(curve, values = null) {
+    const param = values ? parametricFromValues(values) : null;
+    const key = JSON.stringify([curve, param]);
     if (key === this.curveKey) return;
     const gl = this.gl;
     gl.activeTexture(gl.TEXTURE1);
     gl.bindTexture(gl.TEXTURE_2D, this.curveTexture);
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA16F, LUT_SIZE, 1, 0, gl.RGBA, gl.FLOAT, buildCurveLut(curve));
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA16F, LUT_SIZE, 1, 0, gl.RGBA, gl.FLOAT, buildCurveLut(curve, param));
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
@@ -503,6 +556,28 @@ export class Renderer {
     gl.uniform4f(u.u_detail, v.sharpen / 100, v.noise / 100, v.colorNoise / 100, (v.defringe || 0) / 100);
     const lens = lensParams(v.distortion, iw, ih);
     gl.uniform4f(u.u_lens, lens?.k || 0, lens?.s || 1, lens ? 1 / (lens.R * lens.R) : 0, lens ? 1 : 0);
+    const persp = perspectiveParams(v, iw, ih);
+    if (persp) {
+      const M = persp.M; // hàng trước → cột trước cho GLSL
+      gl.uniformMatrix3fv(u.u_persp, false, new Float32Array([M[0], M[3], M[6], M[1], M[4], M[7], M[2], M[5], M[8]]));
+      gl.uniform4f(u.u_perspC, persp.cx, persp.cy, persp.L, 1);
+    } else {
+      gl.uniform4f(u.u_perspC, iw / 2, ih / 2, 1, 0);
+    }
+    const calib = calibrationMatrix(v);
+    if (calib) gl.uniformMatrix3fv(u.u_calib, false, new Float32Array([calib[0], calib[3], calib[6], calib[1], calib[4], calib[7], calib[2], calib[5], calib[8]]));
+    gl.uniform2f(u.u_calibParams, calib ? 1 : 0, (v.calShadowTint || 0) / 100);
+    const lut = settings.lut && this.lutResolver ? this.lutResolver(settings.lut) : null;
+    const lutAmount = (v.lutAmount ?? 100) / 100;
+    if (lut && lutAmount > 0) {
+      this.uploadLut(lut);
+      gl.uniform4f(u.u_lutParams, lutAmount, lut.size, 1, 0);
+      const min = lut.domainMin || [0, 0, 0], max = lut.domainMax || [1, 1, 1];
+      gl.uniform3f(u.u_lutMin, ...min);
+      gl.uniform3f(u.u_lutScale, ...max.map((m, i) => 1 / (m - min[i])));
+    } else {
+      gl.uniform4f(u.u_lutParams, 0, 2, 0, 0);
+    }
     gl.uniform1f(u.u_outSharpen, outputSharpen);
     gl.uniform4f(u.u_fx, v.vignette / 100, v.grain / 100, v.grainSize / 100, 7.31);
     const pack = (prefix) => new Float32Array(hslColors.map(([id]) => v[`${prefix}${id}`] / 100));
@@ -573,6 +648,15 @@ export class Renderer {
     gl.bindTexture(gl.TEXTURE_2D, this.curveTexture);
     gl.activeTexture(gl.TEXTURE2);
     gl.bindTexture(gl.TEXTURE_2D_ARRAY, this.maskTexture);
+    gl.activeTexture(gl.TEXTURE4);
+    gl.bindTexture(gl.TEXTURE_3D, this.lutTexture);
+  }
+
+  /** Chuẩn bị đường cong + uniform cho một bộ thiết lập. */
+  prepare(settings, options) {
+    const eff = effectiveSettings(settings);
+    this.setCurve(eff.curve, eff.values);
+    this.setUniforms(settings, options);
   }
 
   quad(dst, src = [0, 0, 1, 1]) {
@@ -585,9 +669,10 @@ export class Renderer {
   /**
    * Vẽ lên canvas hiển thị.
    * rect: vị trí ảnh đầu ra trên canvas (pixel canvas): { x, y, width, height }
-   * split: null | vị trí x (pixel canvas) của đường chia – bên trái là ảnh gốc.
+   * split: null | vị trí x (pixel canvas) của đường chia – bên trái là ảnh gốc (hoặc ảnh tham chiếu).
+   * reference: thiết lập dùng thay cho ảnh gốc (so sánh với một bước lịch sử / snapshot).
    */
-  drawView(settings, { crop, rect, original, split = null, overlayMask = -1, clipping = false, background }) {
+  drawView(settings, { crop, rect, original, split = null, overlayMask = -1, clipping = false, background, reference = null, liveBrush = null }) {
     const gl = this.gl;
     const W = this.canvas.width;
     const H = this.canvas.height;
@@ -599,19 +684,30 @@ export class Renderer {
     if (!this.imageTexture) return;
     gl.useProgram(this.program);
     this.bindTextures();
-    this.setCurve(effectiveSettings(settings).curve);
     const out = outputSize(crop);
     const pxPerScreen = out.width / rect.width;
     const toNdcX = (x) => (x / W) * 2 - 1;
     const toNdcY = (y) => 1 - (y / H) * 2;
     const dst = [toNdcX(rect.x), toNdcY(rect.y), toNdcX(rect.x + rect.width), toNdcY(rect.y + rect.height)];
-    this.setUniforms(settings, { crop, pxPerScreen, original, overlayMask, clipping, background });
+    const drawReference = () => {
+      this.syncMasks(reference.masks, null);
+      this.bindTextures();
+      this.prepare(reference, { crop, pxPerScreen, clipping, background });
+      this.quad(dst);
+    };
+    if (original && reference) { drawReference(); return; }
+    this.syncMasks(settings.masks, liveBrush);
+    this.bindTextures();
+    this.prepare(settings, { crop, pxPerScreen, original, overlayMask, clipping, background });
     this.quad(dst);
     if (split !== null && !original) {
       gl.enable(gl.SCISSOR_TEST);
       gl.scissor(0, 0, Math.max(0, Math.round(split)), H);
-      gl.uniform1f(this.uniforms.u_original, 1);
-      this.quad(dst);
+      if (reference) drawReference();
+      else {
+        gl.uniform1f(this.uniforms.u_original, 1);
+        this.quad(dst);
+      }
       gl.disable(gl.SCISSOR_TEST);
     }
   }
@@ -641,8 +737,7 @@ export class Renderer {
     gl.disable(gl.SCISSOR_TEST);
     gl.useProgram(this.program);
     this.bindTextures();
-    this.setCurve(effectiveSettings(settings).curve);
-    this.setUniforms(settings, { crop, pxPerScreen, original, outputSharpen });
+    this.prepare(settings, { crop, pxPerScreen, original, outputSharpen });
     // Đặt hàng đầu ảnh ở y = -1 để readPixels trả về thứ tự từ trên xuống.
     this.quad([-1, -1, 1, 1], src);
     const pixels = target || new Uint8Array(width * height * 4);

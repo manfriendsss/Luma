@@ -110,15 +110,15 @@ try {
     await page.click("#presetDrawerHandle");
     await settle(300);
     await page.hover(".preset-apply >> text=ĐEN TRẮNG CỔ ĐIỂN");
-    await settle(300);
+    await page.waitForFunction(() => window.__luma.state.previewSettings?.values.saturation === -100, null, { timeout: 5000 }).catch(() => {});
     const preview = await app(() => [window.__luma.state.previewLabel, window.__luma.state.previewSettings?.values.saturation, document.elementFromPoint(160, 420)?.className]);
     assert.equal(preview[1], -100, `xem trước: ${JSON.stringify(preview)}`);
-    assert.ok(await page.isVisible("#previewBadge"));
-    const px = await centerPixel();
+    await page.waitForSelector("#previewBadge:not([hidden])", { timeout: 5000 });
+    let px = await centerPixel();
+    for (let i = 0; i < 15 && !(Math.abs(px[0] - px[1]) < 6 && Math.abs(px[1] - px[2]) < 6); i++) { await settle(200); px = await centerPixel(); }
     assert.ok(Math.abs(px[0] - px[1]) < 6 && Math.abs(px[1] - px[2]) < 6, `ảnh xem trước phải đen trắng: ${px}`);
     await page.mouse.move(700, 450);
-    await settle(300);
-    assert.equal(await app(() => window.__luma.state.previewSettings), null);
+    await page.waitForFunction(() => window.__luma.state.previewSettings === null, null, { timeout: 5000 });
     await page.keyboard.press("Escape");
   });
 
@@ -203,6 +203,116 @@ try {
     assert.equal((await photo()).settings.crop.angle, 6);
   });
 
+  const setValue = async (id, v) => { await page.fill(`#${id}Value`, String(v)); await page.press(`#${id}Value`, "Enter"); await settle(200); };
+  const pixelDiff = (a, b) => Math.abs(a[0] - b[0]) + Math.abs(a[1] - b[1]) + Math.abs(a[2] - b[2]);
+  /** Đọc lại điểm giữa cho tới khi thoả điều kiện (render có thể trễ một vài khung hình khi máy bận). */
+  const pixelUntil = async (ok, tries = 20) => {
+    let px = await centerPixel();
+    for (let i = 0; i < tries && !ok(px); i++) { await settle(150); px = await centerPixel(); }
+    return px;
+  };
+
+  const sectionState = await app(() => [...document.querySelectorAll("[data-section]")].map((s) => [s.dataset.section, s.querySelector(".section-toggle").getAttribute("aria-expanded")]));
+  const restoreSections = () => app((saved) => { for (const [id, open] of saved) document.querySelector(`[data-section="${id}"] .section-toggle`).setAttribute("aria-expanded", open); }, sectionState);
+
+  await step("Web Worker sẵn sàng; AVIF chỉ hiện khi mã hoá được", async () => {
+    await page.waitForFunction(() => window.__luma.state.capabilities.worker === true, null, { timeout: 15000 });
+    const { avif, hidden } = await app(() => ({ avif: window.__luma.state.capabilities.avif, hidden: document.getElementById("avifOption").hidden }));
+    assert.equal(hidden, !avif);
+  });
+
+  await step("Phối cảnh: Dọc + Vừa khung thay đổi ảnh, góc không lộ vùng trống", async () => {
+    await page.click("#collapseAllButton");
+    await page.click('[data-section="transform"] .section-toggle');
+    await settle(150);
+    await page.keyboard.press("r"); await page.keyboard.press("Escape"); // đảm bảo không ở chế độ cắt
+    const before = await centerPixel();
+    await setValue("perspVertical", 45);
+    await page.click("#transformFitButton");
+    await settle(400);
+    const v = await values();
+    assert.equal(v.perspVertical, 45);
+    assert.ok(v.perspScale > 100, `thu phóng ${v.perspScale}`);
+    assert.ok(await app(() => document.querySelector('[data-section="transform"]').classList.contains("modified")));
+    const corners = await app(() => {
+      const gl = window.__luma.state.renderer.gl;
+      const l = window.__luma.state.layout;
+      const px = new Uint8Array(4);
+      gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+      gl.readPixels(Math.round((l.x + l.width - 3) * l.dpr), Math.round(gl.canvas.height - (l.y + l.height - 3) * l.dpr), 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px);
+      return [...px];
+    });
+    assert.ok(corners[3] === 255 && corners[0] + corners[1] + corners[2] > 20, `góc dưới phải có ảnh: ${corners}`);
+    assert.ok(pixelDiff(before, await pixelUntil((p) => pixelDiff(before, p) > 3)) > 3, "ảnh đã thay đổi");
+    await setValue("perspVertical", 0);
+    await setValue("perspScale", 100);
+    await page.click('[data-section="transform"] .section-toggle');
+  });
+
+  await step("Đường cong tham số và hiệu chỉnh màu gốc làm thay đổi ảnh", async () => {
+    await page.click('[data-section="curve"] .section-toggle');
+    await page.click("#curveParamDetails summary");
+    const before = await centerPixel();
+    await setValue("paramShadows", 80);
+    await setValue("paramDarks", 60);
+    const lifted = await pixelUntil((p) => pixelDiff(before, p) > 3);
+    assert.ok(pixelDiff(before, lifted) > 3, `đường cong tham số: ${before} → ${lifted}`);
+    assert.ok(await app(() => document.getElementById("curveParamDetails").classList.contains("modified")));
+    await page.click('[data-section="calibration"] .section-toggle');
+    await setValue("calGreenHue", 100);
+    await setValue("calGreenSat", -80);
+    const calibrated = await pixelUntil((p) => pixelDiff(lifted, p) > 2);
+    assert.ok(pixelDiff(lifted, calibrated) > 2, `màu gốc: ${lifted} → ${calibrated}`);
+    for (let i = 0; i < 4; i++) await page.keyboard.press("Control+z");
+    await settle(200);
+    const v = await values();
+    assert.deepEqual([v.paramShadows, v.paramDarks, v.calGreenHue, v.calGreenSat], [0, 0, 0, 0]);
+    await page.click("#collapseAllButton");
+    await settle(300);
+  });
+
+  await step("LUT .cube: nhập, áp dụng, cường độ, bỏ LUT", async () => {
+    const lines = ['TITLE "Đảo màu"', "LUT_3D_SIZE 2"];
+    for (let b = 0; b < 2; b++) for (let g = 0; g < 2; g++) for (let r = 0; r < 2; r++) lines.push(`${1 - r} ${1 - g} ${1 - b}`);
+    // Vùng chọn được áp dụng sau LUT → tạm tắt để kiểm tra phép đảo màu
+    await page.click('[data-section="masks"] .section-bypass');
+    await settle(300);
+    const before = await centerPixel();
+    await page.setInputFiles("#lutFileInput", { name: "invert.cube", mimeType: "text/plain", buffer: Buffer.from(lines.join("\n")) });
+    await page.waitForFunction(() => window.__luma.activePhoto().settings.lut?.name === "Đảo màu");
+    await settle(300);
+    const inverted = await pixelUntil((p) => Math.abs(p[2] - (255 - before[2])) < 40);
+    for (let c = 0; c < 3; c++) assert.ok(Math.abs(inverted[c] - (255 - before[c])) < 40, `kênh ${c}: ${before[c]} → ${inverted[c]}`);
+    await page.click('[data-section="lut"] .section-toggle');
+    await setValue("lutAmount", 0);
+    const restored = await pixelUntil((p) => pixelDiff(before, p) < 12);
+    assert.ok(pixelDiff(before, restored) < 12, `cường độ 0 = không đổi: ${before} → ${restored}`);
+    assert.equal(await app(() => window.__luma.state.luts.size), 1);
+    await page.selectOption("#lutSelect", "");
+    await settle(200);
+    assert.equal((await photo()).settings.lut, null);
+    await setValue("lutAmount", 100);
+    await page.click('[data-section="masks"] .section-bypass');
+    await restoreSections();
+  });
+
+  await step("So sánh với một bước lịch sử (thay cho ảnh gốc)", async () => {
+    await restoreSections();
+    await setValue("exposure", 1.2);
+    await page.click('[data-section="history"] .section-toggle');
+    await settle(150);
+    await page.locator("#historyList .compare-icon").first().click();
+    await settle(300);
+    const ref = await app(() => ({ label: window.__luma.state.compareRef?.label, mode: window.__luma.state.previewMode }));
+    assert.ok(ref.label, "có mốc so sánh");
+    assert.equal(ref.mode, "split");
+    assert.ok(await page.isVisible("#compareBadge"));
+    await page.click("#compareBadgeClear");
+    assert.equal(await app(() => window.__luma.state.compareRef), null);
+    assert.equal(await app(() => window.__luma.state.previewMode), "after");
+    await page.click('[data-section="history"] .section-toggle');
+  });
+
   await step("Mở nhiều ảnh: chỉ giữ tối đa 2 ảnh giải mã trong RAM", async () => {
     const files = Array.from({ length: 6 }, (_, i) => ({ name: `bulk-${i + 1}.jpg`, mimeType: "image/jpeg", buffer: sampleBuffer }));
     await page.setInputFiles("#fileInput", files);
@@ -211,6 +321,42 @@ try {
     for (let i = 0; i < 4; i++) { await page.keyboard.press("ArrowRight"); await settle(300); }
     const resident = await app(() => window.__luma.residentCount());
     assert.ok(resident <= 2, `ảnh trong RAM: ${resident}`);
+  });
+
+  await step("Chế độ Lưới: G mở, mũi tên di chuyển, gắn sao, Enter quay lại", async () => {
+    await page.keyboard.press("g");
+    await page.waitForSelector("#gridView:not([hidden]) .grid-card");
+    assert.equal(await page.locator(".grid-card").count(), 7);
+    assert.ok(await page.isHidden("#canvasViewport"));
+    const start = await app(() => window.__luma.state.photos.findIndex((p) => p.id === window.__luma.state.activeId));
+    await page.keyboard.press(start > 0 ? "ArrowLeft" : "ArrowRight");
+    await settle(200);
+    const moved = await app(() => window.__luma.state.photos.findIndex((p) => p.id === window.__luma.state.activeId));
+    assert.notEqual(moved, start);
+    await page.keyboard.press("2");
+    await settle(150);
+    assert.equal((await photo()).rating, 2);
+    assert.equal(await page.locator(".grid-card.active .grid-star.on").count(), 2);
+    await page.keyboard.press("0");
+    // Ảnh đã chỉnh có thumbnail render lại (worker)
+    await page.waitForFunction(() => window.__luma.state.photos.some((p) => p.previewUrl), null, { timeout: 15000 });
+    await page.keyboard.press("Enter");
+    await page.waitForFunction(() => window.__luma.state.viewMode === "loupe" && window.__luma.activePhoto()?.bitmap);
+    assert.ok(await page.isVisible("#canvasViewport"));
+  });
+
+  await step("So sánh nhiều ảnh (N): 2 ảnh đã chọn hiện cạnh nhau", async () => {
+    await app(() => {
+      const { state } = window.__luma;
+      const other = state.photos.find((p) => p.id !== state.activeId);
+      state.photos.forEach((p) => { p.selected = p.id === state.activeId || p === other; });
+    });
+    await page.keyboard.press("n");
+    await page.waitForFunction(() => document.querySelectorAll(".survey-cell").length === 2);
+    await page.waitForFunction(() => [...document.querySelectorAll(".survey-cell img")].every((img) => img.src.startsWith("blob:") && img.complete && img.naturalWidth > 0) && !document.querySelector(".survey-cell.loading"), null, { timeout: 30000 });
+    await page.keyboard.press("e");
+    await page.waitForFunction(() => window.__luma.state.viewMode === "loupe");
+    await app(() => { window.__luma.state.photos.forEach((p) => { p.selected = true; }); });
   });
 
   await step("Phím mũi tên trên đường cong / vòng màu không chuyển ảnh", async () => {
@@ -323,6 +469,43 @@ try {
     const seg = meta.findExifSegment(bytes);
     assert.ok(seg && new TextDecoder("latin1").decode(seg).includes("LUMA Test Cam"));
     await page.waitForFunction(() => !document.querySelector("#exportDialog").open);
+  });
+
+  await step("Watermark: chữ ở giữa ảnh xuất (PNG, qua worker)", async () => {
+    const exportCenter = async (watermark) => {
+      await page.click("#exportButton");
+      await page.selectOption("#exportPresetSelect", "full-jpeg");
+      await page.selectOption("#exportScopeSelect", "active");
+      await page.selectOption("#formatSelect", "image/png");
+      await page.selectOption("#deliverySelect", "download");
+      if (watermark !== await page.isChecked("#watermarkToggle")) await page.click("#watermarkToggle");
+      if (watermark) {
+        await page.fill("#watermarkText", "██████");
+        await page.selectOption("#watermarkPosition", "c");
+        await page.fill("#watermarkSize", "20");
+        await page.fill("#watermarkOpacity", "100");
+        await page.dispatchEvent("#watermarkSize", "input");
+        await page.dispatchEvent("#watermarkOpacity", "input");
+        await page.evaluate(() => { const c = document.getElementById("watermarkColor"); c.value = "#ff0000"; c.dispatchEvent(new Event("change")); });
+      }
+      const [download] = await Promise.all([page.waitForEvent("download"), page.click("#confirmExportButton")]);
+      const bytes = await readFile(await download.path());
+      await page.waitForFunction(() => !document.querySelector("#exportDialog").open);
+      return app(async (b64) => {
+        const blob = await (await fetch(`data:image/png;base64,${b64}`)).blob();
+        const bmp = await createImageBitmap(blob);
+        const c = new OffscreenCanvas(bmp.width, bmp.height);
+        const ctx = c.getContext("2d");
+        ctx.drawImage(bmp, 0, 0);
+        return [...ctx.getImageData(Math.floor(bmp.width / 2), Math.floor(bmp.height / 2), 1, 1).data];
+      }, bytes.toString("base64"));
+    };
+    const plain = await exportCenter(false);
+    const marked = await exportCenter(true);
+    assert.ok(marked[0] > 200 && marked[1] < 80 && marked[2] < 80, `giữa ảnh có chữ đỏ: ${marked} (gốc ${plain})`);
+    await page.click("#exportButton");
+    await page.click("#watermarkToggle");
+    await page.click("#cancelExportButton");
   });
 
   await step("Xuất ZIP PNG giới hạn cạnh dài cho ảnh theo bộ lọc", async () => {

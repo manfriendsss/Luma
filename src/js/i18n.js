@@ -155,6 +155,46 @@ const EXACT = {
   "Không ghi được file .luma.json vào thư mục – thiết lập vẫn được lưu trong trình duyệt.": "Could not write .luma.json to the folder – settings are still saved in the browser.",
   "Không thể biên dịch shader.": "Could not compile the shader.", "Không thể khởi tạo bộ xử lý ảnh.": "Could not initialize the image processor.",
   "Đã gắn cờ chọn": "Flagged as picked", "Đã đánh dấu loại": "Marked as rejected", "Đã bỏ cờ": "Flag removed",
+  // Chế độ xem
+  "Chế độ xem": "View mode", "Ảnh": "Photo", "So sánh": "Compare", "Xem một ảnh (E)": "Single photo (E)", "Lưới ảnh để lọc nhanh (G)": "Photo grid for quick culling (G)",
+  "So sánh 2–4 ảnh đã chọn cạnh nhau (N)": "Compare 2–4 selected photos side by side (N)", "Lưới ảnh": "Photo grid", "Cỡ ô": "Cell size",
+  "Ảnh trong phiên": "Photos in session", "So sánh nhiều ảnh": "Compare photos", "Không có ảnh nào khớp bộ lọc.": "No photos match the filter.",
+  "Bấm để chọn · nhấp đúp hoặc": "Click to select · double-click or", "để mở ·": "to open ·", "sao ·": "stars ·", "cờ · mũi tên để di chuyển": "flags · arrow keys to move",
+  "Chọn 2–4 ảnh (Ctrl + bấm trong filmstrip) để so sánh cạnh nhau. Bấm một ô để đặt làm ảnh đang chọn, nhấp đúp để mở.": "Select 2–4 photos (Ctrl + click in the filmstrip) to compare them side by side. Click a cell to make it active, double-click to open.",
+  "Lưới ảnh / xem một ảnh / so sánh nhiều ảnh": "Photo grid / single photo / compare photos",
+  // So sánh với mốc
+  "MỐC": "REF", "Bỏ mốc so sánh": "Clear comparison reference", "So sánh lại với ảnh gốc": "Compare with the original again",
+  "So sánh ảnh hiện tại với mốc này": "Compare the current photo with this state", "Đang so sánh với mốc này – bấm để bỏ": "Comparing with this state – click to stop",
+  "Nút so sánh (vòng tròn nửa đậm) cạnh một bước hoặc snapshot: so sánh ảnh hiện tại với mốc đó (Trước / Tách đôi)": "The compare button (half-filled circle) next to a step or snapshot: compare the current photo with it (Before / Split)",
+  "Lịch sử": "History",
+  // LUT
+  "LUT MÀU": "COLOR LUT", "LUT (.cube)": "LUT (.cube)", "Nhập .cube": "Import .cube", "Nhập file .cube (có thể kéo thả vào cửa sổ)": "Import .cube files (you can also drop them into the window)",
+  "Chọn LUT": "Choose LUT", "Không dùng LUT": "No LUT", "Xoá LUT khỏi thư viện": "Delete LUT from library", "Tạm tắt LUT": "Turn off LUT", "Cường độ LUT": "LUT amount",
+  "LUT được lưu trong thư viện của trình duyệt và áp dụng sau phân màu, trước vùng chọn.": "LUTs are kept in the browser library and applied after color grading, before masks.",
+  "Bỏ LUT": "Remove LUT", "Không lưu được LUT vào thư viện – LUT chỉ dùng được trong phiên này.": "Could not save the LUT to the library – it only works in this session.",
+  "Thả để thêm ảnh, preset hoặc LUT": "Drop to add photos, presets or LUTs",
+  // Đường cong tham số
+  "Đường cong tham số": "Parametric curve", "Vùng sáng vừa": "Lights", "Vùng tối vừa": "Darks", "Ranh giới tối": "Shadow split", "Ranh giới giữa": "Midtone split", "Ranh giới sáng": "Highlight split",
+  "Áp dụng trước đường cong điểm, giống thanh Region trong Lightroom.": "Applied before the point curve, like the Region sliders in Lightroom.",
+  // Phối cảnh
+  "PHỐI CẢNH": "TRANSFORM", "Transform": "Transform", "Phối cảnh": "Transform", "Tạm tắt sửa phối cảnh": "Turn off transform", "Vừa khung": "Fit", "Tự thu phóng để không lộ vùng trống": "Auto-scale so no empty area shows",
+  "Hiện lưới căn trên ảnh": "Show alignment grid", "Dọc": "Vertical", "Ngang": "Horizontal", "Tỉ lệ khung": "Aspect", "Thu phóng": "Scale", "Dịch ngang": "Offset X", "Dịch dọc": "Offset Y",
+  "Dọc dương mở rộng phần trên ảnh – sửa toà nhà bị “ngả” khi chụp ngước lên.": "Positive Vertical widens the top of the photo – fixes buildings that lean back when shot from below.",
+  "Phối cảnh: vừa khung": "Transform: fit",
+  // Hiệu chỉnh màu gốc
+  "MÀU GỐC": "CALIBRATION", "Hiệu chỉnh màu gốc": "Calibration", "Tạm tắt hiệu chỉnh màu gốc": "Turn off calibration", "Sắc thái vùng tối": "Shadows tint",
+  "Đỏ · sắc độ": "Red primary · hue", "Đỏ · bão hoà": "Red primary · saturation", "Lục · sắc độ": "Green primary · hue", "Lục · bão hoà": "Green primary · saturation",
+  "Lam · sắc độ": "Blue primary · hue", "Lam · bão hoà": "Blue primary · saturation",
+  "Dịch ba màu cơ bản đỏ/lục/lam – cách nhanh để tạo tông màu phim.": "Shift the red/green/blue primaries – a quick way to build a film look.",
+  // Bút
+  "Lực nhấn bút": "Pen pressure", "Đổi cỡ cọ": "Controls size", "Đổi lưu lượng": "Controls flow", "Không dùng": "Off",
+  "Giữ <kbd>Alt</kbd> để tẩy": "Hold Alt to erase",
+  // Xuất ảnh
+  "Watermark": "Watermark", "Chữ": "Text", "Vị trí": "Position", "Cỡ": "Size", "Độ đậm": "Opacity", "Dùng logo": "Use logo", "Chọn logo…": "Choose logo…", "Màu chữ": "Text color",
+  "Trên trái": "Top left", "Trên giữa": "Top center", "Trên phải": "Top right", "Giữa trái": "Middle left", "Chính giữa": "Center", "Giữa phải": "Middle right",
+  "Dưới trái": "Bottom left", "Dưới giữa": "Bottom center", "Dưới phải": "Bottom right", "Không đọc được file logo.": "Could not read the logo file.",
+  "Web · AVIF 2560px": "Web · AVIF 2560px", "Chọn cùng lúc nhiều file JPG, PNG, WebP hoặc AVIF.": "Pick several JPG, PNG, WebP or AVIF files at once.",
+  "Vui lòng chọn ảnh JPG, PNG, WebP hoặc AVIF.": "Please choose JPG, PNG, WebP or AVIF photos.",
 };
 
 // Mẫu có biến: {0}, {1}… (giá trị biến cũng được dịch nếu có trong từ điển)
@@ -182,7 +222,19 @@ const PATTERNS = [
   ["Mở ảnh {0}: {1}", "Open photo {0}: {1}"], ["Nhân bản {0}", "Duplicate {0}"], ["Phiên: {0}", "Session: {0}"], ["Phân màu {0}", "Color grading {0}"],
   ["Quay lại {0} bước", "Go back {0} step(s)"], ["Tiến tới {0} bước", "Go forward {0} step(s)"], ["Sao chép từ {0}", "Copy from {0}"], ["Sắc độ {0}°", "Hue {0}°"],
   ["Thêm {0}", "Add {0}"], ["Thêm vùng chọn để chỉnh sáng, màu và chi tiết cục bộ. Tối đa {0} vùng.", "Add a mask to adjust light, color and detail locally. Up to {0} masks."],
-  ["Thư mục “{0}” không có ảnh JPG, PNG hoặc WebP.", "Folder “{0}” has no JPG, PNG or WebP photos."], ["Trừ dải {0}", "Subtract range {0}"],
+  ["Thư mục “{0}” không có ảnh JPG, PNG hoặc WebP.", "Folder “{0}” has no JPG, PNG or WebP photos."],
+  ["Thư mục “{0}” không có ảnh JPG, PNG, WebP hoặc AVIF.", "Folder “{0}” has no JPG, PNG, WebP or AVIF photos."],
+  ["MỐC: {0}", "REF: {0}"], ["So sánh với: {0}", "Comparing with: {0}"], ["So sánh với {0}", "Compare with {0}"],
+  ["Đang so sánh với: {0}. Dùng Trước / Tách đôi để xem.", "Comparing with: {0}. Use Before / Split to view."], ["Snapshot “{0}”", "Snapshot “{0}”"],
+  ["LUT {0}", "LUT {0}"], ["{0} (không có trong thư viện)", "{0} (not in library)"],
+  ["Không tìm thấy LUT “{0}” trong thư viện của trình duyệt này – hãy nhập lại file .cube.", "LUT “{0}” is not in this browser's library – please import the .cube file again."],
+  ["Đã nhập LUT “{0}” và áp dụng cho ảnh đang xem.", "Imported LUT “{0}” and applied it to the current photo."], ["Đã nhập LUT “{0}”.", "Imported LUT “{0}”."],
+  ["Đã nhập {0} LUT.", "Imported {0} LUTs."], ["Đã xoá LUT “{0}”.", "Deleted LUT “{0}”."],
+  ["Đã xoá LUT “{0}” khỏi thư viện ({1} ảnh vẫn tham chiếu – sẽ không được áp dụng).", "Deleted LUT “{0}” from the library ({1} photo(s) still reference it – it won't be applied)."],
+  ["Thu phóng {0}% để không lộ vùng trống.", "Scaled to {0}% so no empty area shows."], ["{0}: không render được ảnh so sánh.", "{0}: could not render the comparison image."],
+  ["{0}: trình duyệt này chưa đọc được HEIC/HEIF – hãy chuyển sang JPEG hoặc mở bằng Safari.", "{0}: this browser cannot read HEIC/HEIF – convert to JPEG or use Safari."],
+  ["Trình duyệt này không mã hoá được {0}.", "This browser cannot encode {0}."], ["{0}: Trình duyệt này không mã hoá được {1}.", "{0}: this browser cannot encode {1}."],
+  ["Kích thước LUT {0} không được hỗ trợ (2–{1}).", "LUT size {0} is not supported (2–{1})."], ["LUT thiếu dữ liệu: cần {0} dòng, có {1}.", "LUT is missing data: needs {0} rows, has {1}."], ["Trừ dải {0}", "Subtract range {0}"],
   ["Tô {0}", "Paint {0}"], ["Tẩy {0}", "Erase {0}"], ["Tối đa {0} vùng chọn cho mỗi ảnh.", "Up to {0} masks per photo."],
   ["Tự động cân bằng trắng: nhiệt độ {0}, sắc thái {1}.", "Auto white balance: temperature {0}, tint {1}."], ["Ví dụ: {0}", "Example: {0}"],
   ["Vòng màu {0}", "{0} color wheel"], ["Vẽ {0}", "Draw {0}"], ["Vừa · {0}%", "Fit · {0}%"], ["XEM TRƯỚC · {0}", "PREVIEW · {0}"], ["Xoá nét {0}", "Clear strokes {0}"],

@@ -75,15 +75,112 @@ function invertLens(lens, x, y) {
   return { x: px, y: py };
 }
 
-export function outputToSource(crop, u, v, lens = null) {
-  const [dx, dy] = apply(cropMatrix(crop), u - 0.5, v - 0.5);
-  return applyLens(lens, crop.cx + dx, crop.cy + dy);
+/* ---------- Phối cảnh (Transform) ---------- */
+
+const mul3 = (a, b) => {
+  const o = new Array(9).fill(0);
+  for (let r = 0; r < 3; r++) for (let c = 0; c < 3; c++) for (let k = 0; k < 3; k++) o[r * 3 + c] += a[r * 3 + k] * b[k * 3 + c];
+  return o;
+};
+
+export function invert3(m) {
+  const [a, b, c, d, e, f, g, h, i] = m;
+  const A = e * i - f * h, B = -(d * i - f * g), C = d * h - e * g;
+  const det = a * A + b * B + c * C;
+  if (Math.abs(det) < 1e-12) return null;
+  return [A / det, -(b * i - c * h) / det, (b * f - c * e) / det, B / det, (a * i - c * g) / det, -(a * f - c * d) / det, C / det, -(a * h - b * g) / det, (a * e - b * d) / det];
 }
 
-export function sourceToOutput(crop, x, y, lens = null) {
-  const p = invertLens(lens, x, y);
+const PERSP_KEYS = ["perspVertical", "perspHorizontal", "perspRotate", "perspAspect", "perspX", "perspY"];
+
+/**
+ * Ma trận lấy mẫu phối cảnh 3×3 (hàng trước) trong toạ độ chuẩn hoá n = (p − tâm) / L, L = nửa cạnh dài.
+ * n_nguồn = M · n_đầu_ra (chia cho thành phần w). null nếu không có chỉnh sửa.
+ * Quy ước: Dọc dương = mở rộng phần trên ảnh (sửa đường dọc hội tụ khi chụp ngước lên).
+ */
+export function perspectiveParams(values, imageWidth, imageHeight) {
+  if (!values) return null;
+  const scale = (values.perspScale ?? 100) / 100;
+  if (PERSP_KEYS.every((k) => !values[k]) && Math.abs(scale - 1) < 1e-9) return null;
+  const L = Math.max(imageWidth, imageHeight) / 2;
+  const vert = (values.perspVertical || 0) / 100;
+  const hor = (values.perspHorizontal || 0) / 100;
+  const P = [1, 0, 0, 0, 1, 0, -hor * 0.45, -vert * 0.45, 1];
+  const t = (values.perspRotate || 0) * DEG;
+  const R = [Math.cos(t), -Math.sin(t), 0, Math.sin(t), Math.cos(t), 0, 0, 0, 1];
+  const a = (values.perspAspect || 0) / 100;
+  const ax = a >= 0 ? 1 + a * 0.5 : 1 / (1 - a * 0.5);
+  const A = [1 / ax, 0, 0, 0, ax, 0, 0, 0, 1];
+  const S = [1 / scale, 0, 0, 0, 1 / scale, 0, 0, 0, 1];
+  const ox = ((values.perspX || 0) / 100) * 0.5;
+  const oy = ((values.perspY || 0) / 100) * 0.5;
+  const O = [1, 0, -ox, 0, 1, -oy, 0, 0, 1];
+  const M = mul3(P, mul3(R, mul3(A, mul3(S, O))));
+  return { M, inv: invert3(M), cx: imageWidth / 2, cy: imageHeight / 2, L };
+}
+
+function applyPersp(persp, x, y) {
+  if (!persp) return { x, y };
+  const nx = (x - persp.cx) / persp.L, ny = (y - persp.cy) / persp.L;
+  const m = persp.M;
+  const w = m[6] * nx + m[7] * ny + m[8];
+  const k = Math.abs(w) < 1e-6 ? 1e6 : 1 / w;
+  return { x: persp.cx + (m[0] * nx + m[1] * ny + m[2]) * k * persp.L, y: persp.cy + (m[3] * nx + m[4] * ny + m[5]) * k * persp.L };
+}
+
+function invertPersp(persp, x, y) {
+  if (!persp?.inv) return { x, y };
+  return applyPersp({ ...persp, M: persp.inv }, x, y);
+}
+
+/** Toàn bộ biến dạng hình học trước khi cắt: { lens, persp } hoặc null. */
+export function warpParams(values, imageWidth, imageHeight, disabled = {}) {
+  const lens = disabled.lens ? null : lensParams(values?.distortion, imageWidth, imageHeight);
+  const persp = disabled.transform ? null : perspectiveParams(values, imageWidth, imageHeight);
+  return lens || persp ? { lens, persp } : null;
+}
+
+// Chấp nhận cả tham số ống kính cũ (lensParams) lẫn đối tượng warp mới
+const asWarp = (w) => (!w ? null : "k" in w ? { lens: w, persp: null } : w);
+
+export function outputToSource(crop, u, v, warp = null) {
+  const w = asWarp(warp);
+  const [dx, dy] = apply(cropMatrix(crop), u - 0.5, v - 0.5);
+  const p = applyPersp(w?.persp, crop.cx + dx, crop.cy + dy);
+  return applyLens(w?.lens, p.x, p.y);
+}
+
+export function sourceToOutput(crop, x, y, warp = null) {
+  const w = asWarp(warp);
+  const l = invertLens(w?.lens, x, y);
+  const p = invertPersp(w?.persp, l.x, l.y);
   const [u, v] = apply(invert2(cropMatrix(crop)), p.x - crop.cx, p.y - crop.cy);
   return { u: u + 0.5, v: v + 0.5 };
+}
+
+/** Thu phóng nhỏ nhất (50–150) để khung ảnh không lộ vùng trống sau khi sửa phối cảnh. */
+export function fitPerspectiveScale(values, imageWidth, imageHeight) {
+  const inside = (scale) => {
+    const persp = perspectiveParams({ ...values, perspScale: scale }, imageWidth, imageHeight);
+    if (!persp) return true;
+    for (let i = 0; i <= 8; i++) {
+      for (const [x, y] of [[i / 8, 0], [i / 8, 1], [0, i / 8], [1, i / 8]]) {
+        const p = applyPersp(persp, x * imageWidth, y * imageHeight);
+        if (p.x < -0.5 || p.y < -0.5 || p.x > imageWidth + 0.5 || p.y > imageHeight + 0.5) return false;
+      }
+    }
+    return true;
+  };
+  if (inside(100)) {
+    let lo = 50, hi = 100;
+    if (inside(lo)) return 50;
+    for (let i = 0; i < 20; i++) { const m = (lo + hi) / 2; if (inside(m)) hi = m; else lo = m; }
+    return Math.min(150, Math.ceil(hi));
+  }
+  let lo = 100, hi = 150;
+  if (!inside(hi)) return 150;
+  for (let i = 0; i < 20; i++) { const m = (lo + hi) / 2; if (inside(m)) hi = m; else lo = m; }
+  return Math.ceil(hi);
 }
 
 /** Góc (độ) mà nội dung ảnh gốc bị xoay khi hiển thị ở đầu ra – dùng để vẽ oval. */

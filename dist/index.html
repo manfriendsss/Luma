@@ -71,6 +71,11 @@
               <span class="file-name" id="fileName">Chưa có ảnh</span>
               <span class="file-dimensions" id="fileDimensions">—</span>
             </div>
+            <div class="view-modes" role="group" aria-label="Chế độ xem">
+              <button class="mode-button active" type="button" data-view-mode="loupe" aria-pressed="true" title="Xem một ảnh (E)">Ảnh</button>
+              <button class="mode-button" type="button" data-view-mode="grid" aria-pressed="false" title="Lưới ảnh để lọc nhanh (G)">Lưới</button>
+              <button class="mode-button" type="button" data-view-mode="survey" aria-pressed="false" title="So sánh 2–4 ảnh đã chọn cạnh nhau (N)">So sánh</button>
+            </div>
             <div class="preview-modes" role="group" aria-label="So sánh trước và sau">
               <button class="mode-button active" type="button" data-preview-mode="after" aria-pressed="true">Sau</button>
               <button class="mode-button" type="button" data-preview-mode="before" aria-pressed="false">Trước</button>
@@ -92,13 +97,17 @@
             <div class="image-frame" id="imageFrame" hidden>
               <svg class="frame-overlay" id="frameOverlay" aria-hidden="true"></svg>
               <div class="split-line" id="splitLine" hidden>
-                <span class="split-label split-before">TRƯỚC</span>
+                <span class="split-label split-before" id="splitBeforeLabel">TRƯỚC</span>
                 <span class="split-label split-after">SAU</span>
                 <span class="split-grip" aria-hidden="true"></span>
               </div>
             </div>
             <span class="before-badge stage-badge" id="beforeBadge" hidden>ẢNH GỐC</span>
             <span class="preview-badge stage-badge" id="previewBadge" hidden></span>
+            <div class="compare-badge stage-badge" id="compareBadge" hidden>
+              <span id="compareBadgeText"></span>
+              <button type="button" id="compareBadgeClear" title="So sánh lại với ảnh gốc" aria-label="Bỏ mốc so sánh">×</button>
+            </div>
             <div class="mask-badge stage-badge" id="maskBadge" hidden>
               <span id="maskBadgeText"></span>
               <button type="button" id="maskBadgeExit" title="Thoát chỉnh vùng chọn (Esc)">Xong</button>
@@ -142,7 +151,7 @@
                 </svg>
               </div>
               <h1>Thả nhiều ảnh vào đây</h1>
-              <p>Chọn cùng lúc nhiều file JPG, PNG hoặc WebP.</p>
+              <p>Chọn cùng lúc nhiều file JPG, PNG, WebP hoặc AVIF.</p>
               <div class="empty-actions">
                 <button class="button button-primary open-image-button" id="openImageButton" type="button">Chọn ảnh</button>
                 <button class="button button-ghost" id="emptyOpenFolderButton" type="button">Mở thư mục</button>
@@ -159,8 +168,22 @@
               <span class="privacy-note">Ảnh chỉ được xử lý và lưu trên máy — không tải lên mạng.</span>
             </div>
 
-            <div class="drop-overlay" id="dropOverlay" hidden><span>Thả để thêm ảnh hoặc preset</span></div>
+            <div class="drop-overlay" id="dropOverlay" hidden><span>Thả để thêm ảnh, preset hoặc LUT</span></div>
           </div>
+
+          <section class="grid-view" id="gridView" aria-label="Lưới ảnh" hidden>
+            <div class="grid-toolbar">
+              <span class="grid-hint">Bấm để chọn · nhấp đúp hoặc <kbd>E</kbd> để mở · <kbd>0</kbd>–<kbd>5</kbd> sao · <kbd>P</kbd>/<kbd>X</kbd> cờ · mũi tên để di chuyển</span>
+              <label class="grid-size"><span>Cỡ ô</span><input id="gridSizeRange" type="range" min="120" max="360" step="10" value="200" /></label>
+            </div>
+            <div class="grid-list" id="gridList" role="listbox" aria-label="Ảnh trong phiên" tabindex="0"></div>
+            <p class="filmstrip-empty" id="gridEmpty" hidden>Không có ảnh nào khớp bộ lọc.</p>
+          </section>
+
+          <section class="survey-view" id="surveyView" aria-label="So sánh nhiều ảnh" hidden>
+            <div class="survey-grid" id="surveyGrid"></div>
+            <p class="survey-hint" id="surveyHint">Chọn 2–4 ảnh (Ctrl + bấm trong filmstrip) để so sánh cạnh nhau. Bấm một ô để đặt làm ảnh đang chọn, nhấp đúp để mở.</p>
+          </section>
 
           <section class="filmstrip" id="filmstripSection" aria-label="Danh sách ảnh" hidden>
             <div class="filmstrip-header">
@@ -258,6 +281,11 @@
                   </div>
                   <canvas class="curve-canvas" id="curveCanvas" tabindex="0" aria-label="Đường cong tông: bấm để thêm điểm, kéo để chỉnh, nhấp đúp hoặc kéo ra ngoài để xoá"></canvas>
                   <p class="section-help">Bấm để thêm điểm · kéo ra ngoài hoặc nhấp đúp để xoá · phím mũi tên để chỉnh tinh.</p>
+                  <details class="sub-details" id="curveParamDetails">
+                    <summary>Đường cong tham số</summary>
+                    <div class="controls-list" id="curveParamControls"></div>
+                    <p class="section-help">Áp dụng trước đường cong điểm, giống thanh Region trong Lightroom.</p>
+                  </details>
                 </div>
               </section>
               <section class="adjustment-section hsl-section" data-section="hsl">
@@ -288,6 +316,22 @@
                   <div class="controls-list grade-sliders" id="gradeControls"></div>
                 </div>
               </section>
+              <section class="adjustment-section" data-section="lut">
+                <div class="section-head">
+                  <button class="section-heading section-toggle" type="button" aria-expanded="false"><div><span class="eyebrow">LUT MÀU</span><h2>LUT (.cube)<span class="section-dot" aria-hidden="true"></span></h2></div><span class="chevron" aria-hidden="true">⌄</span></button>
+                  <button class="section-bypass" type="button" aria-pressed="false" data-eye aria-label="Tạm tắt LUT" hidden></button>
+                  <button class="chip-button" id="importLutButton" type="button" title="Nhập file .cube (có thể kéo thả vào cửa sổ)">Nhập .cube</button>
+                </div>
+                <div class="section-content lut-content">
+                  <div class="inline-row">
+                    <select id="lutSelect" aria-label="Chọn LUT"><option value="">Không dùng LUT</option></select>
+                    <button class="button button-ghost" id="deleteLutButton" type="button" title="Xoá LUT khỏi thư viện" aria-label="Xoá LUT khỏi thư viện" disabled>×</button>
+                  </div>
+                  <p class="section-warning" id="lutMissing" hidden></p>
+                  <div class="controls-list" id="lutControls"></div>
+                  <p class="section-help">LUT được lưu trong thư viện của trình duyệt và áp dụng sau phân màu, trước vùng chọn.</p>
+                </div>
+              </section>
               <section class="adjustment-section" data-section="effects">
                 <div class="section-head">
                   <button class="section-heading section-toggle" type="button" aria-expanded="true"><div><span class="eyebrow">HIỆU ỨNG</span><h2>Hiện diện &amp; hoàn thiện<span class="section-dot" aria-hidden="true"></span></h2></div><span class="chevron" aria-hidden="true">⌄</span></button>
@@ -310,6 +354,28 @@
                 <div class="section-content">
                   <div class="controls-list" id="lensControls"></div>
                   <p class="section-help lens-help">Méo hình dương sửa ảnh bị phình (góc rộng), âm sửa ảnh bị thắt (tele).</p>
+                </div>
+              </section>
+              <section class="adjustment-section" data-section="transform">
+                <div class="section-head">
+                  <button class="section-heading section-toggle" type="button" aria-expanded="false"><div><span class="eyebrow">PHỐI CẢNH</span><h2>Transform<span class="section-dot" aria-hidden="true"></span></h2></div><span class="chevron" aria-hidden="true">⌄</span></button>
+                  <button class="section-bypass" type="button" aria-pressed="false" data-eye aria-label="Tạm tắt sửa phối cảnh" hidden></button>
+                  <button class="chip-button" id="transformFitButton" type="button" title="Tự thu phóng để không lộ vùng trống">Vừa khung</button>
+                </div>
+                <div class="section-content">
+                  <label class="toggle-label guide-toggle"><input id="guideGridToggle" type="checkbox" /> Hiện lưới căn trên ảnh</label>
+                  <div class="controls-list" id="transformControls"></div>
+                  <p class="section-help">Dọc dương mở rộng phần trên ảnh – sửa toà nhà bị “ngả” khi chụp ngước lên.</p>
+                </div>
+              </section>
+              <section class="adjustment-section" data-section="calibration">
+                <div class="section-head">
+                  <button class="section-heading section-toggle" type="button" aria-expanded="false"><div><span class="eyebrow">MÀU GỐC</span><h2>Hiệu chỉnh màu gốc<span class="section-dot" aria-hidden="true"></span></h2></div><span class="chevron" aria-hidden="true">⌄</span></button>
+                  <button class="section-bypass" type="button" aria-pressed="false" data-eye aria-label="Tạm tắt hiệu chỉnh màu gốc" hidden></button>
+                </div>
+                <div class="section-content">
+                  <div class="controls-list" id="calibrationControls"></div>
+                  <p class="section-help">Dịch ba màu cơ bản đỏ/lục/lam – cách nhanh để tạo tông màu phim.</p>
                 </div>
               </section>
 
@@ -340,6 +406,13 @@
                       <div class="mini-control"><label for="brushFeatherRange">Độ mềm</label><input id="brushFeatherRange" type="range" min="0" max="100" value="50" /><output id="brushFeatherValue">50</output></div>
                       <div class="mini-control"><label for="brushFlowRange">Lưu lượng</label><input id="brushFlowRange" type="range" min="5" max="100" value="100" /><output id="brushFlowValue">100</output></div>
                       <label class="toggle-label"><input id="eraseMaskToggle" type="checkbox" /> Tẩy (giữ Alt)</label>
+                      <label class="crop-field pressure-field"><span>Lực nhấn bút</span>
+                        <select id="brushPressureSelect">
+                          <option value="size">Đổi cỡ cọ</option>
+                          <option value="flow">Đổi lưu lượng</option>
+                          <option value="none">Không dùng</option>
+                        </select>
+                      </label>
                     </div>
                     <div class="brush-options" id="radialOptions" hidden>
                       <div class="mini-control"><label for="maskFeatherRange">Độ mềm</label><input id="maskFeatherRange" type="range" min="0" max="100" value="50" /><output id="maskFeatherValue">50</output></div>
@@ -388,7 +461,9 @@
       </main>
     </div>
 
-    <input id="fileInput" type="file" accept="image/jpeg,image/png,image/webp" multiple hidden />
+    <input id="fileInput" type="file" accept="image/jpeg,image/png,image/webp,image/avif,image/heic,image/heif,.avif,.heic,.heif" multiple hidden />
+    <input id="lutFileInput" type="file" accept=".cube" multiple hidden />
+    <input id="logoFileInput" type="file" accept="image/png,image/webp,image/svg+xml,image/jpeg" hidden />
     <input id="presetFileInput" type="file" accept=".xmp,.lrtemplate,.json,application/json,text/xml,text/plain" multiple hidden />
 
     <dialog class="app-dialog export-dialog" id="exportDialog" aria-labelledby="exportTitle">
@@ -413,7 +488,7 @@
           </div>
           <div>
             <label class="field-label" for="formatSelect">Định dạng</label>
-            <select id="formatSelect"><option value="image/jpeg">JPEG</option><option value="image/png">PNG</option><option value="image/webp">WebP</option></select>
+            <select id="formatSelect"><option value="image/jpeg">JPEG</option><option value="image/png">PNG</option><option value="image/webp">WebP</option><option value="image/avif" id="avifOption" hidden disabled>AVIF</option></select>
           </div>
         </div>
         <div id="qualityField">
@@ -460,6 +535,31 @@
           <button type="button" class="token" data-token="{preset}" title="Tên preset đang dùng">{preset}</button>
         </div>
         <p class="template-preview" id="templatePreview"></p>
+        <fieldset class="watermark-field">
+          <legend><label class="toggle-label"><input id="watermarkToggle" type="checkbox" /> Watermark</label></legend>
+          <div class="watermark-body" id="watermarkBody" hidden>
+            <div class="field-grid">
+              <div>
+                <label class="field-label" for="watermarkText">Chữ</label>
+                <input class="text-input" id="watermarkText" type="text" maxlength="80" value="© LUMA" autocomplete="off" />
+              </div>
+              <div>
+                <label class="field-label" for="watermarkPosition">Vị trí</label>
+                <select id="watermarkPosition"></select>
+              </div>
+            </div>
+            <div class="field-grid">
+              <div class="mini-control"><label for="watermarkSize">Cỡ</label><input id="watermarkSize" type="range" min="1" max="20" step="0.5" value="4" /><output id="watermarkSizeValue">4%</output></div>
+              <div class="mini-control"><label for="watermarkOpacity">Độ đậm</label><input id="watermarkOpacity" type="range" min="10" max="100" step="1" value="70" /><output id="watermarkOpacityValue">70%</output></div>
+            </div>
+            <div class="watermark-logo-row">
+              <label class="toggle-label"><input id="watermarkLogoToggle" type="checkbox" /> Dùng logo</label>
+              <img id="watermarkLogoPreview" alt="" hidden />
+              <button class="button button-ghost" id="watermarkLogoButton" type="button">Chọn logo…</button>
+              <label class="toggle-label"><input id="watermarkColor" type="color" value="#ffffff" aria-label="Màu chữ" /> Màu chữ</label>
+            </div>
+          </div>
+        </fieldset>
         <div class="checkbox-stack" id="metadataField">
           <label class="toggle-label"><input id="keepExifToggle" type="checkbox" checked /> Giữ thông tin máy ảnh (EXIF) khi xuất JPEG</label>
           <label class="toggle-label"><input id="keepGpsToggle" type="checkbox" /> Giữ cả vị trí GPS</label>
@@ -523,6 +623,7 @@
           <dt><kbd>+</kbd> / <kbd>-</kbd> · cuộn chuột</dt><dd>Phóng to / thu nhỏ</dd>
           <dt><kbd>Space</kbd> + kéo</dt><dd>Di chuyển ảnh khi đang phóng to</dd>
           <dt><kbd>←</kbd> <kbd>→</kbd></dt><dd>Ảnh trước / sau (theo bộ lọc)</dd>
+          <dt><kbd>G</kbd> / <kbd>E</kbd> / <kbd>N</kbd></dt><dd>Lưới ảnh / xem một ảnh / so sánh nhiều ảnh</dd>
           <dt>Ctrl / Shift + bấm ảnh</dt><dd>Chọn thêm / chọn một dãy trong filmstrip</dd>
           <dt><kbd>Ctrl</kbd> <kbd>Shift</kbd> <kbd>C</kbd> / <kbd>V</kbd></dt><dd>Sao chép / dán thiết lập</dd>
           <dt><kbd>Ctrl</kbd> <kbd>Shift</kbd> <kbd>S</kbd></dt><dd>Đồng bộ sang ảnh đã chọn</dd>
@@ -531,7 +632,8 @@
           <dt><kbd>F</kbd></dt><dd>Toàn màn hình</dd>
           <dt>Thanh trượt</dt><dd>Nhấp đúp nhãn/thanh để đặt lại · <kbd>Shift</kbd> + kéo để chỉnh tinh · <kbd>Shift</kbd> + mũi tên bước ×10 · cuộn chuột khi đang chọn</dd>
           <dt>Tiêu đề nhóm</dt><dd><kbd>Alt</kbd> + bấm: chỉ mở nhóm đó · nút con mắt: tạm tắt nhóm để so sánh</dd>
-          <dt>Cọ vùng</dt><dd>Giữ <kbd>Alt</kbd> để tẩy · <kbd>[</kbd> <kbd>]</kbd> đổi cỡ cọ</dd>
+          <dt>Cọ vùng</dt><dd>Giữ <kbd>Alt</kbd> để tẩy · <kbd>[</kbd> <kbd>]</kbd> đổi cỡ cọ · bút cảm ứng: lực nhấn đổi cỡ hoặc lưu lượng</dd>
+          <dt>Lịch sử</dt><dd>Nút so sánh (vòng tròn nửa đậm) cạnh một bước hoặc snapshot: so sánh ảnh hiện tại với mốc đó (Trước / Tách đôi)</dd>
         </dl>
       </form>
     </dialog>

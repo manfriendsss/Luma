@@ -57,6 +57,10 @@ LUMA là trình chỉnh màu ảnh **miễn phí và mã nguồn mở** lấy c�
 - Kết cấu, độ nét cục bộ, khử sương, tối góc, hạt phim, làm nét và giảm nhiễu.
 - Tự động cân bằng tông và công cụ chấm cân bằng trắng.
 - Ống kính: méo hình (barrel/pincushion) và khử viền màu.
+- **Phối cảnh (Transform)**: Dọc, Ngang, Xoay, Tỉ lệ khung, Thu phóng, Dịch; nút **Vừa khung** tự thu phóng để không lộ vùng trống, có lưới căn trên ảnh.
+- **Đường cong tham số** (Vùng sáng / Sáng vừa / Tối vừa / Vùng tối + 3 ranh giới) bên cạnh đường cong điểm.
+- **Hiệu chỉnh màu gốc** (Calibration): sắc độ và bão hoà của ba màu cơ bản, sắc thái vùng tối.
+- **LUT `.cube`** (3D và 1D): nhập vào thư viện của trình duyệt, chọn cho từng ảnh, chỉnh cường độ.
 - Làm nét đầu ra khi xuất (màn hình / in).
 
 #### Quy trình nhiều ảnh
@@ -74,6 +78,9 @@ LUMA là trình chỉnh màu ảnh **miễn phí và mã nguồn mở** lấy c�
 - Bảng **Lịch sử** có tên từng bước, bấm để quay lại; **Snapshot** lưu trạng thái đặt tên.
 - Menu **Thiết lập ▾** gom Ảnh trước, Sao chép, Dán, Đồng bộ, Bản sao ảo, Đặt lại.
 - Giải mã ảnh tuần tự và chỉ giữ tối đa 2 ảnh trong bộ nhớ, mở được nhiều ảnh lớn.
+- Giải mã, tạo thumbnail và xuất ảnh chạy trong **Web Worker** (OffscreenCanvas + WebGL 2) nên giao diện không bị đứng; tự quay về luồng chính nếu trình duyệt không hỗ trợ.
+- Chế độ **Lưới** (`G`) để lọc nhanh: thumbnail đã áp chỉnh sửa, chấm sao/gắn cờ ngay trên ô, di chuyển bằng phím mũi tên.
+- Chế độ **So sánh** (`N`): xem 2–4 ảnh đã chọn cạnh nhau.
 
 #### Mask và chỉnh sửa cục bộ
 
@@ -83,6 +90,7 @@ LUMA là trình chỉnh màu ảnh **miễn phí và mã nguồn mở** lấy c�
 - Tối đa 8 mask trên mỗi ảnh; hỗ trợ đảo vùng, nhân bản, ẩn/hiện và lớp phủ mask.
 - Mask **Dải sáng** và **Dải màu** (chấm màu trên ảnh); mọi mask có thể tinh chỉnh thêm theo độ sáng hoặc màu.
 - Bấm vào vùng trống hoặc nút × trên nhãn để thoát chỉnh mask; `Delete` xoá mask đang chọn.
+- Cọ hỗ trợ **lực nhấn bút cảm ứng** (đổi cỡ cọ hoặc lưu lượng).
 
 #### Preset và xuất ảnh
 
@@ -93,10 +101,13 @@ LUMA là trình chỉnh màu ảnh **miễn phí và mã nguồn mở** lấy c�
 - Tải từng file, chọn thư mục lưu hoặc đóng gói thành ZIP.
 - Giữ EXIF cho JPEG và mặc định loại bỏ dữ liệu vị trí GPS.
 - Preset xuất (có sẵn và tự lưu), mẫu tên file với `{name}` `{date}` `{n}` `{w}` `{h}` `{rating}` `{preset}`.
+- **Watermark** chữ và/hoặc logo, 9 vị trí, chỉnh cỡ và độ đậm.
+- Xuất **AVIF** khi trình duyệt mã hoá được; mở được ảnh AVIF (và HEIC trên trình duyệt hỗ trợ, ví dụ Safari).
 
 #### Công cụ xem và bố cục
 
 - So sánh Trước/Sau, chế độ tách đôi và giữ `\` để xem ảnh gốc.
+- So sánh với **một bước lịch sử hoặc snapshot** bất kỳ thay cho ảnh gốc (nút so sánh trong bảng Lịch sử).
 - Histogram với cảnh báo cháy sáng hoặc mất chi tiết.
 - Zoom 1:1 và lớn hơn, kéo ảnh, toàn màn hình và bảng phím tắt.
 - Cắt, nắn thẳng, xoay 90° và lật ảnh theo cách không phá huỷ.
@@ -148,6 +159,7 @@ Mở `http://127.0.0.1:4173`. Không cần chạy `npm install` cho chế độ 
 | `Delete` | Xoá mask đang chọn |
 | `X` / `O` (khi cắt) | Đổi chiều khung / đổi lưới |
 | `Ctrl+'` | Tạo bản sao ảo |
+| `G` / `E` / `N` | Lưới / xem một ảnh / so sánh nhiều ảnh |
 | `?` | Mở bảng phím tắt |
 
 ### Phát triển và kiểm thử
@@ -181,6 +193,9 @@ npm run test:e2e
 | `src/js/filmstrip.js` | Filmstrip, sao, cờ, bộ lọc |
 | `src/js/presets-ui.js`, `dialogs.js`, `export.js` | Preset, menu thiết lập, xuất ảnh |
 | `src/js/session.js`, `i18n.js` | Tự lưu phiên, song ngữ |
+| `src/js/gridview.js` | Chế độ Lưới, So sánh, thumbnail đã chỉnh |
+| `src/js/worker.js`, `worker-client.js`, `render-tasks.js` | Web Worker: giải mã, xem trước, xuất ảnh |
+| `src/js/lut.js`, `luts-ui.js`, `watermark.js` | LUT `.cube`, thư viện LUT, watermark |
 | `src/js/renderer.js` | Pipeline màu, mask, crop và tiled rendering bằng WebGL 2 |
 | `src/js/presets.js` | Đọc và ghi preset Lightroom/LUMA |
 | `src/js/curve.js` | Đường cong tông và LUT |
@@ -246,6 +261,10 @@ The app runs in Chrome or Edge and uses WebGL 2 for GPU-accelerated image proces
 - Texture, clarity, dehaze, vignette, film grain, sharpening, and noise reduction.
 - Automatic tone adjustment and a white-balance picker.
 - Lens corrections: distortion (barrel/pincushion) and defringe.
+- **Transform**: Vertical, Horizontal, Rotate, Aspect, Scale and Offset; **Fit** auto-scales so no empty area shows, with an optional alignment grid.
+- **Parametric curve** (Highlights / Lights / Darks / Shadows + 3 splits) alongside the point curve.
+- **Calibration**: hue and saturation of the red/green/blue primaries, plus shadows tint.
+- **`.cube` LUTs** (3D and 1D): import into the browser library, assign per photo, adjust the amount.
 - Output sharpening on export (screen / print).
 
 #### Multi-image workflow
@@ -263,6 +282,9 @@ The app runs in Chrome or Edge and uses WebGL 2 for GPU-accelerated image proces
 - Named **History** panel (click a step to jump back) and named **Snapshots**.
 - **Settings ▾** menu grouping Previous, Copy, Paste, Sync, Virtual copy, and Reset.
 - Sequential decoding with at most two full images in memory, so large batches stay light.
+- Decoding, thumbnails and export run in a **Web Worker** (OffscreenCanvas + WebGL 2) so the UI stays responsive, with an automatic main-thread fallback.
+- **Grid** view (`G`) for culling: edited thumbnails, star and flag right on the cell, arrow-key navigation.
+- **Survey** view (`N`): compare 2–4 selected photos side by side.
 
 #### Masks and local adjustments
 
@@ -272,6 +294,7 @@ The app runs in Chrome or Edge and uses WebGL 2 for GPU-accelerated image proces
 - Up to eight masks per image, with invert, duplicate, visibility, and overlay options.
 - **Luminance range** and **Color range** masks (pick a color on the image); any mask can be refined by luminance or color.
 - Click empty space or the × on the mask badge to stop editing a mask; `Delete` removes the selected mask.
+- Brush supports **pen pressure** (controls size or flow).
 
 #### Presets and export
 
@@ -282,10 +305,13 @@ The app runs in Chrome or Edge and uses WebGL 2 for GPU-accelerated image proces
 - Download individual files, write to a selected folder, or package results as ZIP.
 - Preserve JPEG EXIF metadata while removing GPS location data by default.
 - Export presets (built-in and custom) and file-name templates with `{name}` `{date}` `{n}` `{w}` `{h}` `{rating}` `{preset}`.
+- Text and/or logo **watermark** with 9 positions, size and opacity.
+- **AVIF** export when the browser can encode it; AVIF input (and HEIC where the browser supports it, e.g. Safari).
 
 #### Viewing and geometry tools
 
 - Before/After, split comparison, and hold `\` to view the original.
+- Compare against **any history step or snapshot** instead of the original (compare button in the History panel).
 - Histogram with highlight and shadow clipping warnings.
 - True 1:1 zoom and beyond, pan, fullscreen mode, and a shortcut reference.
 - Non-destructive crop, straighten, 90° rotation, and flip.
@@ -337,6 +363,7 @@ Open `http://127.0.0.1:4173`. A normal local run does not require `npm install` 
 | `Delete` | Delete the selected mask |
 | `X` / `O` (while cropping) | Swap orientation / cycle overlay |
 | `Ctrl+'` | Create a virtual copy |
+| `G` / `E` / `N` | Grid / single photo / survey |
 | `?` | Open the shortcut guide |
 
 ### Development and testing
@@ -370,6 +397,9 @@ npm run test:e2e
 | `src/js/filmstrip.js` | Filmstrip, ratings, flags, filters |
 | `src/js/presets-ui.js`, `dialogs.js`, `export.js` | Presets, settings menu, export |
 | `src/js/session.js`, `i18n.js` | Autosave and bilingual UI |
+| `src/js/gridview.js` | Grid and Survey views, edited thumbnails |
+| `src/js/worker.js`, `worker-client.js`, `render-tasks.js` | Web Worker: decoding, previews, export |
+| `src/js/lut.js`, `luts-ui.js`, `watermark.js` | `.cube` LUTs, LUT library, watermark |
 | `src/js/renderer.js` | WebGL 2 color pipeline, masks, crop, and tiled rendering |
 | `src/js/presets.js` | Lightroom/LUMA preset import and export |
 | `src/js/curve.js` | Tone curves and LUT generation |

@@ -6,7 +6,8 @@ import {
 import {
   defaultCurve, defaultGrade, cloneSettings, createMask, isIdentityCurve, sectionModified, defaultRange, defaultSettings,
 } from "./settings.js";
-import { outputToSource } from "./geometry.js";
+import { valueDefaults } from "./config.js";
+import { outputToSource, fitPerspectiveScale } from "./geometry.js";
 import { autoTone, autoWhiteBalance } from "./color.js";
 import { CurveEditor, ColorWheel, drawHistogram } from "./widgets.js";
 import { buildControls, setRangeProgress } from "./controls.js";
@@ -16,7 +17,8 @@ import {
 } from "./core.js";
 import { setActivePresetMark, updatePresetAmount, renderPresetList } from "./presets-ui.js";
 import { updateFilmstripBadges, selectedPhotos } from "./filmstrip.js";
-import { updateDimensions, updateHistogramInfo, setTool, updateBrushCursor } from "./view.js";
+import { updateDimensions, updateHistogramInfo, setTool, updateBrushCursor, warpOf, scheduleRender as viewRender } from "./view.js";
+import { syncLutPanel } from "./luts-ui.js";
 import { askName } from "./dialogs.js";
 
 let controlSets = [];
@@ -166,6 +168,7 @@ function toggleSectionBypass(sectionId) {
 
 export function syncSectionStates() {
   const photo = activePhoto();
+  el.curveParamDetails.classList.toggle("modified", !!photo && controlGroups.curveParam.some((c) => photo.settings.values[c.id] !== valueDefaults[c.id]));
   document.querySelectorAll("[data-section]").forEach((section) => {
     const id = section.dataset.section;
     const modified = photo ? sectionModified(photo.settings, id) : false;
@@ -255,6 +258,7 @@ export function syncAllControls() {
   syncCurvePanel();
   syncSectionStates();
   updatePresetAmount();
+  syncLutPanel();
 }
 
 /* ---------- Đường cong ---------- */
@@ -297,6 +301,7 @@ function buildCurvePanel() {
     if (!photo) return;
     record(photo, "Đặt lại đường cong");
     photo.settings.curve = defaultCurve();
+    for (const c of controlGroups.curveParam) photo.settings.values[c.id] = valueDefaults[c.id];
     photo.settings.preset = null;
     settingsChanged(photo);
   });
@@ -306,7 +311,7 @@ function syncCurvePanel() {
   const photo = activePhoto();
   if (!photo || !curveEditor) return;
   curveEditor.setPoints(photo.settings.curve[state.curveChannel], state.curveChannel);
-  el.curveResetButton.disabled = !Object.values(photo.settings.curve).some((pts) => !isIdentityCurve(pts));
+  el.curveResetButton.disabled = !sectionModified(photo.settings, "curve");
   document.querySelectorAll("[data-curve-channel]").forEach((b) => {
     b.classList.toggle("modified", !isIdentityCurve(photo.settings.curve[b.dataset.curveChannel]));
   });
@@ -431,11 +436,12 @@ export function addMask(type) {
   if (photo.settings.masks.length >= MAX_MASKS) { showToast(`Tối đa ${MAX_MASKS} vùng chọn cho mỗi ảnh.`); return; }
   record(photo, `Thêm ${maskTypes[type].label}`);
   const mask = createMask(type);
-  const center = outputToSource(photo.settings.crop, 0.5, 0.5);
+  const warp = warpOf(photo);
+  const center = outputToSource(photo.settings.crop, 0.5, 0.5, warp);
   if (type === "radial") mask.radial.center = { x: center.x / photo.width, y: center.y / photo.height };
   if (type === "linear") {
-    const top = outputToSource(photo.settings.crop, 0.5, 0.1);
-    const mid = outputToSource(photo.settings.crop, 0.5, 0.55);
+    const top = outputToSource(photo.settings.crop, 0.5, 0.1, warp);
+    const mid = outputToSource(photo.settings.crop, 0.5, 0.55, warp);
     mask.linear = { start: { x: top.x / photo.width, y: top.y / photo.height }, end: { x: mid.x / photo.width, y: mid.y / photo.height } };
   }
   photo.settings.masks.push(mask);
@@ -648,8 +654,9 @@ export function renderHistoryPanel() {
   el.snapshotButton.disabled = !photo;
   if (!photo) { el.historyEmpty.hidden = false; return; }
   el.historyEmpty.hidden = true;
-  const row = (label, steps, cls) => {
+  const row = (label, steps, cls, settings = null) => {
     const li = document.createElement("li");
+    li.className = "history-row";
     const b = document.createElement("button");
     b.type = "button";
     b.className = `history-step ${cls}`;
@@ -658,11 +665,12 @@ export function renderHistoryPanel() {
     else b.title = steps < 0 ? `Quay lại ${-steps} bước` : `Tiến tới ${steps} bước`;
     b.addEventListener("click", () => { if (steps) stepHistory(photo, steps); });
     li.appendChild(b);
+    if (settings) li.appendChild(compareButton(photo, label, settings));
     list.appendChild(li);
   };
-  photo.future.forEach((step, j) => row(step.label, photo.future.length - j, "future"));
+  photo.future.forEach((step, j) => row(step.label, photo.future.length - j, "future", step.settings));
   row(currentLabel(photo), 0, "current");
-  for (let i = photo.history.length - 1; i >= 0; i--) row(photo.history[i - 1]?.label ?? "Trạng thái đầu", -(photo.history.length - i), "past");
+  for (let i = photo.history.length - 1; i >= 0; i--) row(photo.history[i - 1]?.label ?? "Trạng thái đầu", -(photo.history.length - i), "past", photo.history[i].settings);
   for (const snap of photo.snapshots) {
     const li = document.createElement("li");
     li.className = "snapshot-item";
@@ -691,10 +699,34 @@ export function renderHistoryPanel() {
       hooks.markDirty(photo);
       renderHistoryPanel();
     });
-    li.append(apply, del);
+    li.append(apply, compareButton(photo, `Snapshot “${snap.name}”`, snap.settings), del);
     el.snapshotList.appendChild(li);
   }
   el.snapshotEmpty.hidden = photo.snapshots.length > 0;
+}
+
+/** Nút ◐: so sánh ảnh hiện tại với một mốc (bước lịch sử / snapshot) thay cho ảnh gốc. */
+function compareButton(photo, label, settings) {
+  const b = document.createElement("button");
+  b.type = "button";
+  b.className = "mask-icon compare-icon";
+  b.innerHTML = '<svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><circle cx="12" cy="12" r="8" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 4a8 8 0 0 1 0 16Z" fill="currentColor"/></svg>';
+  const active = state.compareRef?.photoId === photo.id && state.compareRef.settings === settings;
+  b.classList.toggle("active", active);
+  b.setAttribute("aria-pressed", String(active));
+  b.title = active ? "Đang so sánh với mốc này – bấm để bỏ" : "So sánh ảnh hiện tại với mốc này";
+  b.setAttribute("aria-label", `So sánh với ${label}`);
+  b.addEventListener("click", () => setCompareReference(active ? null : { photoId: photo.id, label, settings }));
+  return b;
+}
+
+export function setCompareReference(ref) {
+  state.compareRef = ref;
+  if (ref && state.previewMode === "after") hooks.setPreviewMode?.("split");
+  if (!ref && state.previewMode !== "after") hooks.setPreviewMode?.("after");
+  renderHistoryPanel();
+  viewRender();
+  if (ref) showToast(`Đang so sánh với: ${ref.label}. Dùng Trước / Tách đôi để xem.`);
 }
 
 async function createSnapshot() {
@@ -770,6 +802,10 @@ export function initPanel() {
     buildControls(el.effectControls, controlGroups.effects, binding),
     buildControls(el.detailControls, controlGroups.detail, binding),
     buildControls(el.lensControls, controlGroups.lens, binding),
+    buildControls(el.transformControls, controlGroups.transform, binding),
+    buildControls(el.calibrationControls, controlGroups.calibration, binding),
+    buildControls(el.curveParamControls, controlGroups.curveParam, binding),
+    buildControls(el.lutControls, controlGroups.lut, binding),
     buildControls(el.hslHueControls, hslGroups.hue, binding),
     buildControls(el.hslSaturationControls, hslGroups.saturation, binding),
     buildControls(el.hslLuminanceControls, hslGroups.luminance, binding),
@@ -792,6 +828,17 @@ export function initPanel() {
   el.autoWhiteBalanceButton.addEventListener("click", runAutoWhiteBalance);
   el.eyedropperButton.addEventListener("click", () => setTool("eyedropper"));
   el.snapshotButton.addEventListener("click", createSnapshot);
+  el.compareBadgeClear.addEventListener("click", () => setCompareReference(null));
+  el.transformFitButton.addEventListener("click", () => {
+    const photo = activePhoto();
+    if (!photo) return;
+    const scale = fitPerspectiveScale(photo.settings.values, photo.width, photo.height);
+    record(photo, "Phối cảnh: vừa khung");
+    photo.settings.values.perspScale = scale;
+    settingsChanged(photo);
+    showToast(`Thu phóng ${scale}% để không lộ vùng trống.`);
+  });
+  el.guideGridToggle.addEventListener("change", () => { state.showGuideGrid = el.guideGridToggle.checked; viewRender(); });
   el.panelHandle.addEventListener("click", () => togglePanel());
   el.panelClose.addEventListener("click", () => togglePanel(false));
   setPanelLocked(true);
